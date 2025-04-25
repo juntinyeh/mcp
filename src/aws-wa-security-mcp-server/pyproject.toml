@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "awslabs.aws-security-pillar-mcp-server"
+version = "0.1.0"
+authors = [
+  { name="AWS COSSA APAC", email="aws-cos-sa-apac@amazon.com" },
+]
+description = "MCP server for AWS security pillar assessment"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "boto3>=1.26.0",
+    "botocore>=1.29.0",
+    "requests>=2.28.0",
+    "beautifulsoup4>=4.11.0",
+    "mcp-server>=0.1.4",
+    "pydantic>=2.0.0",
+    "loguru>=0.7.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/aws-samples/aws-wa-security-pillar-mcp-server"
+"Bug Tracker" = "https://github.com/aws-samples/aws-wa-security-pillar-mcp-server/issues"
+
+[project.scripts]
+aws-security-pillar-mcp-server = "awslabs.aws_wa_security_pillar_mcp_server.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["awslabs"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "awslabs",
+    "LICENSE",
+    "README.md",
+]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "$version"
+version_files = [
+    "pyproject.toml:version",
+    "awslabs/aws_security_pillar_mcp_server/__init__.py:__version__"
+]
+update_changelog_on_bump = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "B", "I", "Q"]
+ignore = ["E203", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["awslabs"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "auto"
