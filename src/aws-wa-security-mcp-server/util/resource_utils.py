@@ -16,7 +16,7 @@ import concurrent.futures
 from typing import Dict, List, Any, Optional, Union, Set
 from loguru import logger
 from mcp.server.fastmcp import Context
-from awslabs.aws_security_pillar_mcp_server.consts import DEFAULT_REGIONS
+from consts import DEFAULT_REGIONS
 
 
 async def list_aws_regions(session: boto3.Session) -> List[str]:
