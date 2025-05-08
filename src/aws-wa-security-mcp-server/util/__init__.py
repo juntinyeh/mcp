@@ -11,7 +11,7 @@
 
 """Utility functions for AWS Security Pillar MCP Server."""
 
-from awslabs.aws_security_pillar_mcp_server.util.security_services import (
+from .security_services import (
     check_access_analyzer,
     check_security_hub,
     check_guard_duty,
@@ -22,7 +22,7 @@ from awslabs.aws_security_pillar_mcp_server.util.security_services import (
     get_access_analyzer_findings,
 )
 
-from awslabs.aws_security_pillar_mcp_server.util.resource_utils import (
+from .resource_utils import (
     list_resources_by_service,
     list_all_resources,
     resource_inventory_summary,
