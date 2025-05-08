@@ -32,7 +32,7 @@ async def get_analyzer_findings_count(analyzer_arn: str, analyzer_client: Any, c
     """
     try:
         response = analyzer_client.list_findings(analyzerArn=analyzer_arn)
-        return len(response.get('findings', []))
+        return str(len(response.get('findings', [])))
     except Exception as e:
         await ctx.warning(f'Error getting findings count: {e}')
         return "Unknown"
@@ -50,16 +50,56 @@ async def check_access_analyzer(region: str, session: boto3.Session, ctx: Contex
         Dictionary with status information about IAM Access Analyzer
     """
     try:
+        print(f"[DEBUG:AccessAnalyzer] Starting Access Analyzer check for region: {region}")
         # Create Access Analyzer client
         analyzer_client = session.client('accessanalyzer', region_name=region)
         
+        print(f"[DEBUG:AccessAnalyzer] Created client successfully, calling list_analyzers API")
         # List existing analyzers
         response = analyzer_client.list_analyzers()
         
+        print(f"[DEBUG:AccessAnalyzer] list_analyzers response: {json.dumps(response)}")
+        
+        # Extract analyzers - verify the field exists to prevent KeyError
+        if 'analyzers' not in response:
+            print("[DEBUG:AccessAnalyzer] No 'analyzers' field in response, reporting as not enabled")
+            return {
+                'enabled': False,
+                'analyzers': [],
+                'debug_info': {'raw_response': response},
+                'setup_instructions': """
+                # IAM Access Analyzer Setup Instructions
+                
+                IAM Access Analyzer is not enabled in this region. To enable it:
+                
+                1. Open the IAM console: https://console.aws.amazon.com/iam/
+                2. Choose Access analyzer
+                3. Choose Create analyzer
+                4. Enter a name for the analyzer
+                5. Choose the type of analyzer (account or organization)
+                6. Choose Create analyzer
+                
+                This is strongly recommended before proceeding with the security review.
+                
+                Learn more: https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html
+                """,
+                'message': 'IAM Access Analyzer is not enabled in this region.'
+            }
+        
         analyzers = response.get('analyzers', [])
+        
+        # Log what we found for debugging
+        print(f"[DEBUG:AccessAnalyzer] Found {len(analyzers)} analyzers in region {region}")
+        for analyzer in analyzers:
+            analyzer_name = analyzer.get('name', 'unnamed')
+            analyzer_type = analyzer.get('type', 'unknown')
+            analyzer_status = analyzer.get('status', 'unknown')
+            analyzer_arn = analyzer.get('arn', 'unknown')
+            print(f"[DEBUG:AccessAnalyzer] Analyzer: {analyzer_name}, Type: {analyzer_type}, Status: {analyzer_status}, ARN: {analyzer_arn}")
         
         if not analyzers:
             # Access Analyzer is not enabled
+            print("[DEBUG:AccessAnalyzer] No analyzers found, reporting as not enabled")
             return {
                 'enabled': False,
                 'analyzers': [],
@@ -82,20 +122,41 @@ async def check_access_analyzer(region: str, session: boto3.Session, ctx: Contex
                 'message': 'IAM Access Analyzer is not enabled in this region.'
             }
         
-        # Access Analyzer is enabled
+        # Force to TRUE if any analyzers exist
+        print(f"[DEBUG:AccessAnalyzer] Analyzers found, setting enabled=TRUE")
+        
+        # Check if any of the analyzers are active
+        active_analyzers = [a for a in analyzers if a.get('status') == 'ACTIVE']
+        print(f"[DEBUG:AccessAnalyzer] Found {len(active_analyzers)} ACTIVE analyzers")
+        
+        # Access Analyzer is enabled if there's at least one analyzer, even if not all are ACTIVE
+        analyzer_details = []
+        for analyzer in analyzers:
+            analyzer_arn = analyzer.get('arn')
+            if analyzer_arn:
+                try:
+                    findings_count = await get_analyzer_findings_count(analyzer_arn, analyzer_client, ctx)
+                    print(f"[DEBUG:AccessAnalyzer] Analyzer {analyzer.get('name')} has {findings_count} findings")
+                except Exception as e:
+                    print(f"[DEBUG:AccessAnalyzer] Error getting findings count: {e}")
+                    findings_count = "Error"
+            else:
+                print(f"[DEBUG:AccessAnalyzer] Missing ARN for analyzer: {analyzer.get('name')}")
+                findings_count = "Unknown (No ARN)"
+                
+            analyzer_details.append({
+                'name': analyzer.get('name'),
+                'type': analyzer.get('type'),
+                'status': analyzer.get('status'),
+                'created_at': str(analyzer.get('createdAt')),
+                'findings_count': findings_count
+            })
+        
+        # Consider IAM Access Analyzer enabled if there's at least one analyzer, even if not all are ACTIVE
         return {
             'enabled': True,
-            'analyzers': [
-                {
-                    'name': analyzer.get('name'),
-                    'type': analyzer.get('type'),
-                    'status': analyzer.get('status'),
-                    'created_at': str(analyzer.get('createdAt')),
-                    'findings_count': await get_analyzer_findings_count(analyzer.get('arn'), analyzer_client, ctx)
-                }
-                for analyzer in analyzers
-            ],
-            'message': f'IAM Access Analyzer is enabled with {len(analyzers)} analyzer(s).'
+            'analyzers': analyzer_details,
+            'message': f'IAM Access Analyzer is enabled with {len(analyzers)} analyzer(s) ({len(active_analyzers)} active).'
         }
     except Exception as e:
         await ctx.error(f'Error checking IAM Access Analyzer status: {e}')
@@ -117,32 +178,93 @@ async def check_security_hub(region: str, session: boto3.Session, ctx: Context) 
     Returns:
         Dictionary with status information about AWS Security Hub
     """
+    print(f"[DEBUG:SecurityHub] Starting Security Hub check for region: {region}")
     try:
         # Create Security Hub client
         securityhub_client = session.client('securityhub', region_name=region)
         
         try:
             # Check if Security Hub is enabled
+            print(f"[DEBUG:SecurityHub] Calling describe_hub() to check if enabled")
             hub_response = securityhub_client.describe_hub()
+            print(f"[DEBUG:SecurityHub] Security Hub is enabled. Hub ARN: {hub_response.get('HubArn', 'Unknown')}")
             
             # Security Hub is enabled, get enabled standards
-            standards_response = securityhub_client.get_enabled_standards()
-            standards = standards_response.get('StandardsSubscriptions', [])
-            
-            return {
-                'enabled': True,
-                'standards': [
-                    {
-                        'name': standard.get('StandardsArn', '').split('/')[-1],
-                        'status': standard.get('StandardsStatus'),
-                        'enabled_at': str(standard.get('StandardsSubscriptionArn', {}).get('EnabledAt', '')),
+            try:
+                print(f"[DEBUG:SecurityHub] Getting enabled standards")
+                standards_response = securityhub_client.get_enabled_standards()
+                standards = standards_response.get('StandardsSubscriptions', [])
+                print(f"[DEBUG:SecurityHub] Found {len(standards)} enabled standards")
+                
+                # Safely process standards with better error handling
+                processed_standards = []
+                for standard in standards:
+                    try:
+                        standard_name = standard.get('StandardsArn', '').split('/')[-1]
+                        standard_status = standard.get('StandardsStatus', 'UNKNOWN')
+                        
+                        # Handle the nested structure carefully
+                        enabled_at = ''
+                        if 'StandardsSubscriptionArn' in standard:
+                            # Sometimes EnabledAt is in the root or might not exist
+                            enabled_at = str(standard.get('EnabledAt', ''))
+                        
+                        processed_standards.append({
+                            'name': standard_name,
+                            'status': standard_status,
+                            'enabled_at': enabled_at
+                        })
+                        print(f"[DEBUG:SecurityHub] Processed standard: {standard_name} (status: {standard_status})")
+                    except Exception as std_err:
+                        print(f"[DEBUG:SecurityHub] Error processing a standard: {std_err}")
+                        
+                return {
+                    'enabled': True,
+                    'standards': processed_standards,
+                    'message': f'Security Hub is enabled with {len(standards)} standards.',
+                    'debug_info': {
+                        'hub_arn': hub_response.get('HubArn', 'Unknown'),
+                        'standards_count': len(standards)
                     }
-                    for standard in standards
-                ],
-                'message': f'Security Hub is enabled with {len(standards)} standards.'
-            }
-        except securityhub_client.exceptions.InvalidAccessException:
+                }
+            except Exception as std_ex:
+                print(f"[DEBUG:SecurityHub] Error getting standards: {std_ex}")
+                # Security Hub is enabled but we couldn't get standards
+                return {
+                    'enabled': True,
+                    'standards': [],
+                    'message': 'Security Hub is enabled but there was an error retrieving standards.',
+                    'debug_info': {
+                        'hub_arn': hub_response.get('HubArn', 'Unknown'),
+                        'error_getting_standards': str(std_ex)
+                    }
+                }
+                
+        except securityhub_client.exceptions.InvalidAccessException as e:
             # Security Hub is not enabled
+            print(f"[DEBUG:SecurityHub] InvalidAccessException indicates Security Hub is not enabled: {e}")
+            return {
+                'enabled': False,
+                'standards': [],
+                'setup_instructions': """
+                # AWS Security Hub Setup Instructions
+                
+                AWS Security Hub is not enabled in this region. To enable it:
+                
+                1. Open the Security Hub console: https://console.aws.amazon.com/securityhub/
+                2. Choose Go to Security Hub
+                3. Configure your security standards
+                4. Choose Enable Security Hub
+                
+                This is strongly recommended for maintaining security best practices.
+                
+                Learn more: https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-get-started.html
+                """,
+                'message': 'AWS Security Hub is not enabled in this region.'
+            }
+        except securityhub_client.exceptions.ResourceNotFoundException as e:
+            # Hub not found - not enabled
+            print(f"[DEBUG:SecurityHub] ResourceNotFoundException indicates Security Hub is not enabled: {e}")
             return {
                 'enabled': False,
                 'standards': [],
@@ -163,11 +285,15 @@ async def check_security_hub(region: str, session: boto3.Session, ctx: Context) 
                 'message': 'AWS Security Hub is not enabled in this region.'
             }
     except Exception as e:
-        await ctx.error(f'Error checking Security Hub status: {e}')
+        print(f"[DEBUG:SecurityHub] ERROR: Error checking Security Hub status: {e}")
         return {
             'enabled': False,
             'error': str(e),
-            'message': 'Error checking Security Hub status.'
+            'message': 'Error checking Security Hub status.',
+            'debug_info': {
+                'exception': str(e),
+                'exception_type': type(e).__name__
+            }
         }
 
 
@@ -252,48 +378,201 @@ async def check_inspector(region: str, session: boto3.Session, ctx: Context) -> 
         
         try:
             # Get Inspector status
-            status_response = inspector_client.get_status()
-            
-            # Check if any scan types are enabled
-            status = status_response.get('status', {})
-            scan_types = ['EC2', 'ECR', 'LAMBDA']
-            enabled_scans = [scan_type for scan_type in scan_types 
-                             if status.get(f'{scan_type}Status') == 'ENABLED']
-            
-            if enabled_scans:
+            print(f"[DEBUG:Inspector] Calling get_status() API for region: {region}")
+            try:
+                # First try using get_status API
+                status_response = inspector_client.get_status()
+                print(f"[DEBUG:Inspector] get_status() successful, raw response: {status_response}")
+                
+                # If we can call get_status successfully, Inspector2 is enabled
+                # Now we need to determine which scan types are enabled
+                
+                # The service exists and is enabled at this point, since get_status worked
+                is_enabled = True
+                
+                # Attempt to extract status from different possible response structures
+                status = {}
+                
+                # Check all possible paths where status might be located
+                if isinstance(status_response, dict):
+                    # Direct status fields in response root
+                    for scan_type in ['EC2', 'ECR', 'LAMBDA', 'ec2', 'ecr', 'lambda']:
+                        # Try all possible field name patterns for each scan type
+                        for field_pattern in [f'{scan_type}Status', f'{scan_type.lower()}Status', 
+                                             f'{scan_type}_status', f'{scan_type.lower()}_status',
+                                             scan_type, scan_type.lower()]:
+                            if field_pattern in status_response:
+                                status[field_pattern] = status_response[field_pattern]
+                    
+                    # Try the 'status' nested object too
+                    if 'status' in status_response and isinstance(status_response['status'], dict):
+                        for key, value in status_response['status'].items():
+                            # Avoid duplicates if we've already found this info
+                            if key not in status:
+                                status[key] = value
+                                
+                print(f"[DEBUG:Inspector] Extracted status fields: {status}")
+                
+                # Check for enabled scan types
+                scan_types = ['EC2', 'ECR', 'LAMBDA']
+                enabled_scans = []
+                
+                for scan_type in scan_types:
+                    found_enabled = False
+                    # Check all possible status keys for this scan type
+                    for status_key in [
+                        f'{scan_type}Status', 
+                        f'{scan_type.lower()}Status', 
+                        f'{scan_type}_status',
+                        f'{scan_type.lower()}_status',
+                        scan_type, 
+                        scan_type.lower()
+                    ]:
+                        status_value = None
+                        
+                        # Try direct key in status dictionary
+                        if status_key in status:
+                            status_value = status[status_key]
+                            print(f"[DEBUG:Inspector] Found status for {scan_type} via key {status_key}: {status_value}")
+                        
+                        # Check if the status value indicates "enabled"
+                        if status_value and (
+                            (isinstance(status_value, str) and status_value.upper() == 'ENABLED') or 
+                            (isinstance(status_value, bool) and status_value is True)
+                        ):
+                            enabled_scans.append(scan_type)
+                            found_enabled = True
+                            print(f"[DEBUG:Inspector] {scan_type} scan type is ENABLED")
+                            break
+                    
+                    if not found_enabled:
+                        # If we haven't found an "enabled" status for this scan type, try one more approach
+                        # Looking for any key that contains the scan type name and has "enabled" value
+                        for status_key, status_value in status.items():
+                            if (scan_type.lower() in status_key.lower() and 
+                                isinstance(status_value, str) and 
+                                'enable' in status_value.lower()):
+                                enabled_scans.append(scan_type)
+                                print(f"[DEBUG:Inspector] {scan_type} scan type is potentially enabled via fuzzy match")
+                                break
+                
+                print(f"[DEBUG:Inspector] Final enabled scan types: {enabled_scans}")
+                
+                # Build the scan status dictionary
+                scan_status = {}
+                for scan_type in scan_types:
+                    scan_found = False
+                    scan_status_key = f'{scan_type.lower()}_status'
+                    
+                    # Look for this scan type in the status dictionary
+                    for status_key, status_value in status.items():
+                        if scan_type.lower() in status_key.lower():
+                            scan_status[scan_status_key] = status_value
+                            scan_found = True
+                            break
+                    
+                    # If no matching key found, indicate unknown
+                    if not scan_found:
+                        scan_status[scan_status_key] = "UNKNOWN"
+                
+                # By this point, if we successfully called get_status, the service itself is enabled
+                # Even if no scan types are explicitly shown as enabled
+                return {
+                    'enabled': is_enabled,
+                    'scan_status': scan_status,
+                    'message': f'Amazon Inspector is enabled with the following scan types: {", ".join(enabled_scans) if enabled_scans else "unknown"}'
+                }
+                
+            except Exception as status_error:
+                # log the error but continue with the alternative checks
+                print(f"[DEBUG:Inspector] get_status() error: {status_error}")
+                await ctx.warning(f"Error calling Inspector2 get_status(): {status_error}")
+                
+            # If get_status failed or didn't find scan types, try another approach
+            # Try calling batch_get_account_status which may give different information
+            try:
+                print(f"[DEBUG:Inspector] Trying batch_get_account_status() as alternative")
+                account_status = inspector_client.batch_get_account_status()
+                print(f"[DEBUG:Inspector] batch_get_account_status returned: {account_status}")
+                
+                # If we get here, the service is enabled
+                if 'accounts' in account_status and account_status['accounts']:
+                    account_info = account_status['accounts'][0]
+                    resource_status = account_info.get('resourceStatus', {})
+                    
+                    # Check which resources are enabled
+                    ec2_enabled = resource_status.get('ec2', {}).get('status') == 'ENABLED'
+                    ecr_enabled = resource_status.get('ecr', {}).get('status') == 'ENABLED'
+                    lambda_enabled = resource_status.get('lambda', {}).get('status') == 'ENABLED'
+                    
+                    enabled_scans = []
+                    if ec2_enabled:
+                        enabled_scans.append('EC2')
+                    if ecr_enabled:
+                        enabled_scans.append('ECR')
+                    if lambda_enabled:
+                        enabled_scans.append('LAMBDA')
+                    
+                    print(f"[DEBUG:Inspector] From batch_get_account_status, enabled scans: {enabled_scans}")
+                    
+                    # If we successfully called batch_get_account_status, treat Inspector as enabled
+                    return {
+                        'enabled': True,
+                        'scan_status': {
+                            'ec2_status': 'ENABLED' if ec2_enabled else 'DISABLED',
+                            'ecr_status': 'ENABLED' if ecr_enabled else 'DISABLED',
+                            'lambda_status': 'ENABLED' if lambda_enabled else 'DISABLED',
+                        },
+                        'message': f'Amazon Inspector is enabled with the following scan types: {", ".join(enabled_scans) if enabled_scans else "none"}'
+                    }
+            except Exception as account_error:
+                print(f"[DEBUG:Inspector] batch_get_account_status() error: {account_error}")
+                
+            # As a last resort, try listing findings
+            # If this works, it means Inspector is enabled
+            try:
+                print("[DEBUG:Inspector] Trying list_findings() as last resort check")
+                # Try listing a small number of findings just to test API access
+                findings_response = inspector_client.list_findings(maxResults=1)
+                print(f"[DEBUG:Inspector] list_findings successful, found {len(findings_response.get('findings', []))} findings")
+                
+                # If we can call list_findings, Inspector is definitely enabled
                 return {
                     'enabled': True,
                     'scan_status': {
-                        'ec2_status': status.get('EC2Status'),
-                        'ecr_status': status.get('ECRStatus'),
-                        'lambda_status': status.get('LAMBDAStatus'),
+                        'ec2_status': 'UNKNOWN',
+                        'ecr_status': 'UNKNOWN',
+                        'lambda_status': 'UNKNOWN'
                     },
-                    'message': f'Amazon Inspector is enabled with the following scan types: {", ".join(enabled_scans)}'
+                    'message': 'Amazon Inspector is enabled, but specific scan types could not be determined.'
                 }
-            else:
-                # No scan types enabled
-                return {
-                    'enabled': False,
-                    'scan_status': {
-                        'ec2_status': status.get('EC2Status'),
-                        'ecr_status': status.get('ECRStatus'),
-                        'lambda_status': status.get('LAMBDAStatus'),
-                    },
-                    'setup_instructions': """
-                    # Amazon Inspector Setup Instructions
-                    
-                    Amazon Inspector is not fully enabled in this region. To enable it:
-                    
-                    1. Open the Inspector console: https://console.aws.amazon.com/inspector/
-                    2. Choose Settings
-                    3. Enable the scan types you need (EC2, ECR, Lambda)
-                    
-                    This is strongly recommended for identifying vulnerabilities in your workloads.
-                    
-                    Learn more: https://docs.aws.amazon.com/inspector/latest/user/enabling-disable-scanning-account.html
-                    """,
-                    'message': 'Amazon Inspector is installed but no scan types are enabled.'
-                }
+            except Exception as findings_error:
+                print(f"[DEBUG:Inspector] list_findings() error: {findings_error}")
+            
+            # If we get here, we've tried multiple methods but can't confirm Inspector is enabled
+            print("[DEBUG:Inspector] All detection methods failed, treating as not enabled")
+            return {
+                'enabled': False,
+                'scan_status': {
+                    'ec2_status': 'UNKNOWN',
+                    'ecr_status': 'UNKNOWN',
+                    'lambda_status': 'UNKNOWN'
+                },
+                'setup_instructions': """
+                # Amazon Inspector Setup Instructions
+                
+                Amazon Inspector may not be fully enabled in this region. To enable it:
+                
+                1. Open the Inspector console: https://console.aws.amazon.com/inspector/
+                2. Choose Settings
+                3. Enable the scan types you need (EC2, ECR, Lambda)
+                
+                This is strongly recommended for identifying vulnerabilities in your workloads.
+                
+                Learn more: https://docs.aws.amazon.com/inspector/latest/user/enabling-disable-scanning-account.html
+                """,
+                'message': 'Amazon Inspector status could not be determined. Multiple detection methods failed.'
+            }
         except inspector_client.exceptions.AccessDeniedException:
             # Inspector is not enabled or permissions issue
             return {
@@ -338,45 +617,61 @@ async def get_guardduty_findings(region: str, session: boto3.Session, ctx: Conte
     Returns:
         Dictionary containing GuardDuty findings
     """
+    print(f"[DEBUG:GuardDuty] Starting findings retrieval for region: {region}")
     try:
         # First check if GuardDuty is enabled
+        print(f"[DEBUG:GuardDuty] Checking if GuardDuty is enabled in {region}")
         guardduty_status = await check_guard_duty(region, session, ctx)
         if not guardduty_status.get('enabled', False):
+            print(f"[DEBUG:GuardDuty] GuardDuty is not enabled in {region}")
             return {
                 'enabled': False,
                 'message': 'Amazon GuardDuty is not enabled in this region',
-                'findings': []
+                'findings': [],
+                'debug_info': 'GuardDuty is not enabled, no findings retrieved'
             }
             
         # Get detector ID
+        print(f"[DEBUG:GuardDuty] GuardDuty is enabled, retrieving detector ID")
         detector_id = guardduty_status.get('detector_details', {}).get('id')
         if not detector_id:
+            print(f"[DEBUG:GuardDuty] ERROR: No GuardDuty detector ID found")
             await ctx.error('No GuardDuty detector ID found')
             return {
                 'enabled': True,
                 'error': 'No GuardDuty detector ID found',
-                'findings': []
+                'findings': [],
+                'debug_info': 'GuardDuty is enabled but no detector ID was found'
             }
             
+        print(f"[DEBUG:GuardDuty] Using detector ID: {detector_id}")
+        
         # Create GuardDuty client
         guardduty_client = session.client('guardduty', region_name=region)
         
         # Set up default finding criteria if none provided
         if filter_criteria is None:
+            print("[DEBUG:GuardDuty] No filter criteria provided, creating default criteria")
             # By default, get findings from the last 30 days with high or medium severity
+            # Calculate timestamp in milliseconds (GuardDuty expects integer timestamp)
+            thirty_days_ago = int((datetime.datetime.now() - datetime.timedelta(days=30)).timestamp() * 1000)
+            
             filter_criteria = {
                 'Criterion': {
                     'severity': {
                         'Eq': ['7', '5', '8']  # High (7), Medium (5), and Critical (8) findings
                     },
                     'updatedAt': {
-                        'GreaterThanOrEqual': (datetime.datetime.now() - 
-                                              datetime.timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                        'GreaterThanOrEqual': thirty_days_ago
                     }
                 }
             }
+            print(f"[DEBUG:GuardDuty] Created default filter criteria with timestamp: {thirty_days_ago} ({datetime.datetime.fromtimestamp(thirty_days_ago/1000).isoformat()})")
+        else:
+            print(f"[DEBUG:GuardDuty] Using provided filter criteria: {json.dumps(filter_criteria)}")
             
         # List findings with the filter criteria
+        print(f"[DEBUG:GuardDuty] Calling list_findings with max results: {max_findings}")
         findings_response = guardduty_client.list_findings(
             DetectorId=detector_id,
             FindingCriteria=filter_criteria,
@@ -384,15 +679,19 @@ async def get_guardduty_findings(region: str, session: boto3.Session, ctx: Conte
         )
         
         finding_ids = findings_response.get('FindingIds', [])
+        print(f"[DEBUG:GuardDuty] Retrieved {len(finding_ids)} finding IDs")
         
         if not finding_ids:
+            print("[DEBUG:GuardDuty] No findings match the filter criteria")
             return {
                 'enabled': True,
                 'message': 'No GuardDuty findings match the filter criteria',
-                'findings': []
+                'findings': [],
+                'debug_info': 'GuardDuty query returned no findings matching the criteria'
             }
             
         # Get finding details
+        print(f"[DEBUG:GuardDuty] Retrieving details for {len(finding_ids)} findings")
         findings_details = guardduty_client.get_findings(
             DetectorId=detector_id,
             FindingIds=finding_ids
@@ -400,16 +699,33 @@ async def get_guardduty_findings(region: str, session: boto3.Session, ctx: Conte
         
         # Process findings to clean up non-serializable objects (like datetime)
         findings = []
+        raw_findings_count = len(findings_details.get('Findings', []))
+        print(f"[DEBUG:GuardDuty] Processing {raw_findings_count} findings from get_findings response")
+        
         for finding in findings_details.get('Findings', []):
             # Convert datetime objects to strings
             finding = _clean_datetime_objects(finding)
             findings.append(finding)
         
+        print(f"[DEBUG:GuardDuty] Successfully processed {len(findings)} findings")
+        
+        # Generate summary
+        summary = _summarize_guardduty_findings(findings)
+        print(f"[DEBUG:GuardDuty] Generated summary with {summary['total_count']} findings")
+        print(f"[DEBUG:GuardDuty] Severity breakdown: High={summary['severity_counts']['high']}, Medium={summary['severity_counts']['medium']}, Low={summary['severity_counts']['low']}")
+        
         return {
             'enabled': True,
             'message': f'Retrieved {len(findings)} GuardDuty findings',
             'findings': findings,
-            'summary': _summarize_guardduty_findings(findings)
+            'summary': summary,
+            'debug_info': {
+                'detector_id': detector_id,
+                'finding_ids_retrieved': len(finding_ids),
+                'findings_details_retrieved': raw_findings_count,
+                'findings_processed': len(findings),
+                'filter_criteria': filter_criteria
+            }
         }
     except Exception as e:
         await ctx.error(f'Error getting GuardDuty findings: {e}')
