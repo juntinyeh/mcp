@@ -20,7 +20,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["."]
+packages = {find = {where = ["."]}}
 
 [project.entry-points.mcp]
 aws-security-pillar-mcp-server = "server:mcp"
