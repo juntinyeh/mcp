@@ -32,11 +32,13 @@ from util.security_services import (
     check_security_hub,
     check_guard_duty,
     check_inspector,
+    check_trusted_advisor,
     get_analyzer_findings_count,
     get_guardduty_findings,
     get_securityhub_findings,
     get_inspector_findings,
     get_access_analyzer_findings,
+    get_trusted_advisor_findings,
 )
 # These are commented out until we restore resource_utils.py functionality
 # from .util.resource_utils import (
@@ -117,8 +119,8 @@ async def check_security_services(
         description="AWS region to check for security services status"
     ),
     services: List[str] = Field(
-        ['guardduty', 'inspector', 'accessanalyzer', 'securityhub'], 
-        description="List of security services to check. Options: guardduty, inspector, accessanalyzer, securityhub"
+        ['guardduty', 'inspector', 'accessanalyzer', 'securityhub', 'trustedadvisor'], 
+        description="List of security services to check. Options: guardduty, inspector, accessanalyzer, securityhub, trustedadvisor"
     ),
     account_id: Optional[str] = Field(
         None, 
@@ -155,6 +157,7 @@ async def check_security_services(
     - inspector2:GetStatus (if checking Inspector)
     - accessanalyzer:ListAnalyzers (if checking Access Analyzer)
     - securityhub:DescribeHub (if checking Security Hub)
+    - support:DescribeTrustedAdvisorChecks (if checking Trusted Advisor)
     """
     try:
         # Start timestamp for measuring execution time
@@ -222,6 +225,10 @@ async def check_security_services(
                     
             elif service_name.lower() == 'securityhub':
                 service_result = await check_security_hub(region, session, ctx)
+            elif service_name.lower() == 'trustedadvisor':
+                print(f"[DEBUG:CheckSecurityServices] Calling check_trusted_advisor")
+                service_result = await check_trusted_advisor(region, session, ctx)
+                print(f"[DEBUG:CheckSecurityServices] check_trusted_advisor returned: enabled={service_result.get('enabled', False)}")
             else:
                 # Log warning
                 print(f"WARNING: Unknown service: {service_name}. Skipping.")
@@ -293,7 +300,7 @@ async def get_security_findings(
     ),
     service: str = Field(
         ...,
-        description="Security service to retrieve findings from ('guardduty', 'securityhub', 'inspector', 'accessanalyzer')"
+        description="Security service to retrieve findings from ('guardduty', 'securityhub', 'inspector', 'accessanalyzer', 'trustedadvisor')"
     ),
     max_findings: int = Field(
         100,
@@ -301,7 +308,7 @@ async def get_security_findings(
     ),
     severity_filter: Optional[str] = Field(
         None,
-        description="Optional severity filter (e.g., 'HIGH', 'CRITICAL')"
+        description="Optional severity filter (e.g., 'HIGH', 'CRITICAL', or for Trusted Advisor: 'ERROR', 'WARNING')"
     ),
     aws_profile: Optional[str] = Field(
         AWS_PROFILE,
@@ -315,7 +322,7 @@ async def get_security_findings(
     """Retrieve security findings from AWS security services.
 
     This tool provides a consolidated interface to retrieve findings from various AWS security
-    services, including GuardDuty, Security Hub, Inspector, and IAM Access Analyzer.
+    services, including GuardDuty, Security Hub, Inspector, IAM Access Analyzer, and Trusted Advisor.
     
     It first checks if the specified security service is enabled in the region (using data from 
     a previous CheckSecurityServices call) and only retrieves findings if the service is enabled.
@@ -340,9 +347,9 @@ async def get_security_findings(
         service_name = service.lower()
         
         # Check if service is supported
-        if service_name not in ['guardduty', 'securityhub', 'inspector', 'accessanalyzer']:
+        if service_name not in ['guardduty', 'securityhub', 'inspector', 'accessanalyzer', 'trustedadvisor']:
             raise ValueError(f"Unsupported security service: {service}. " + 
-                          "Supported services are: guardduty, securityhub, inspector, accessanalyzer")
+                          "Supported services are: guardduty, securityhub, inspector, accessanalyzer, trustedadvisor")
         
         # Get context key for security services data
         context_key = f"security_services_{region}"
@@ -406,6 +413,9 @@ async def get_security_findings(
                 filter_criteria = {
                     'severities': [{'comparison': 'EQUALS', 'value': severity_filter.upper()}]
                 }
+            elif service_name == 'trustedadvisor':
+                # For Trusted Advisor, severity maps to status (error, warning, ok)
+                status_filter = [severity_filter.lower()]
         
         # Call appropriate service function based on service parameter
         if service_name == 'guardduty':
@@ -420,6 +430,24 @@ async def get_security_findings(
         elif service_name == 'accessanalyzer':
             print(f"Retrieving IAM Access Analyzer findings from {region}...")
             result = await get_access_analyzer_findings(region, session, ctx)
+        elif service_name == 'trustedadvisor':
+            print(f"Retrieving Trusted Advisor security checks with Error/Warning status...")
+            # For Trusted Advisor, we'll focus on security category checks
+            # Use the severity filter if provided, otherwise default to error and warning
+            if severity_filter:
+                status_filter = [severity_filter.lower()]
+                print(f"Filtering Trusted Advisor checks by status: {status_filter}")
+            else:
+                status_filter = ['error', 'warning']
+                print(f"Using default status filter for Trusted Advisor: {status_filter}")
+            result = await get_trusted_advisor_findings(
+                region, 
+                session, 
+                ctx, 
+                max_findings=max_findings,
+                status_filter=status_filter,
+                category_filter='security'
+            )
         
         # Add service info to result
         result['service'] = service_name

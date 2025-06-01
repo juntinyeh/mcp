@@ -1184,3 +1184,261 @@ def _summarize_access_analyzer_findings(findings: List[Dict]) -> Dict:
                 summary['action_counts'][action] = 1
     
     return summary
+
+
+async def check_trusted_advisor(region: str, session: boto3.Session, ctx: Context) -> Dict:
+    """Check if AWS Trusted Advisor is accessible in the account.
+    
+    Args:
+        region: AWS region to check (Trusted Advisor is a global service, but API calls must be made to us-east-1)
+        session: boto3 Session for AWS API calls
+        ctx: MCP context for error reporting
+        
+    Returns:
+        Dictionary with status information about AWS Trusted Advisor
+        
+    Note:
+        Full Trusted Advisor functionality requires Business or Enterprise Support plan.
+    """
+    try:
+        print(f"[DEBUG:TrustedAdvisor] Starting Trusted Advisor check")
+        
+        # Trusted Advisor API is only available in us-east-1
+        support_client = session.client('support', region_name='us-east-1')
+        
+        try:
+            # Try to describe Trusted Advisor checks to see if we have access
+            print(f"[DEBUG:TrustedAdvisor] Calling describe_trusted_advisor_checks API")
+            checks_response = support_client.describe_trusted_advisor_checks(language='en')
+            
+            # If we get here, we have access to Trusted Advisor
+            checks = checks_response.get('checks', [])
+            print(f"[DEBUG:TrustedAdvisor] Successfully retrieved {len(checks)} Trusted Advisor checks")
+            
+            # Count checks by category
+            category_counts = {}
+            for check in checks:
+                category = check.get('category', 'unknown')
+                if category in category_counts:
+                    category_counts[category] += 1
+                else:
+                    category_counts[category] = 1
+            
+            # Count security checks specifically
+            security_checks = [check for check in checks if check.get('category') == 'security']
+            print(f"[DEBUG:TrustedAdvisor] Found {len(security_checks)} security-related checks")
+            
+            # Determine support tier based on number of checks
+            # Basic support typically has 7 core checks, Business/Enterprise has 100+
+            support_tier = "Basic" if len(checks) < 20 else "Business/Enterprise"
+            
+            return {
+                'enabled': True,
+                'support_tier': support_tier,
+                'total_checks': len(checks),
+                'security_checks': len(security_checks),
+                'category_counts': category_counts,
+                'message': f'AWS Trusted Advisor is accessible with {support_tier} Support ({len(checks)} checks available, {len(security_checks)} security checks).'
+            }
+            
+        except support_client.exceptions.SubscriptionRequiredException:
+            # This exception means Trusted Advisor is not available with the current support plan
+            print(f"[DEBUG:TrustedAdvisor] SubscriptionRequiredException - Business or Enterprise Support required")
+            return {
+                'enabled': False,
+                'support_tier': 'Basic',
+                'setup_instructions': """
+                # AWS Trusted Advisor Full Access Requirements
+                
+                Full access to AWS Trusted Advisor requires Business or Enterprise Support plan.
+                
+                With your current support plan, you have limited access to Trusted Advisor.
+                To get full access to all Trusted Advisor checks:
+                
+                1. Open the AWS Support Center Console: https://console.aws.amazon.com/support/
+                2. Choose Support Center
+                3. Choose Compare or change your Support plan
+                4. Upgrade to Business or Enterprise Support
+                
+                Learn more: https://aws.amazon.com/premiumsupport/
+                """,
+                'message': 'Full AWS Trusted Advisor functionality requires Business or Enterprise Support plan.'
+            }
+            
+    except Exception as e:
+        await ctx.error(f'Error checking Trusted Advisor status: {e}')
+        return {
+            'enabled': False,
+            'error': str(e),
+            'message': 'Error checking Trusted Advisor status.'
+        }
+
+
+async def get_trusted_advisor_findings(
+    region: str, 
+    session: boto3.Session, 
+    ctx: Context,
+    max_findings: int = 100,
+    status_filter: Optional[List[str]] = None,
+    category_filter: Optional[str] = None
+) -> Dict:
+    """Retrieve check results from AWS Trusted Advisor.
+    
+    Args:
+        region: AWS region (Trusted Advisor is global, but API calls must be made to us-east-1)
+        session: boto3 Session for AWS API calls
+        ctx: MCP context for error reporting
+        max_findings: Maximum number of findings to return (default: 100)
+        status_filter: Optional list of statuses to filter by (e.g., ['error', 'warning'])
+        category_filter: Optional category to filter by (e.g., 'security')
+        
+    Returns:
+        Dictionary containing Trusted Advisor check results
+    """
+    try:
+        print(f"[DEBUG:TrustedAdvisor] Starting findings retrieval")
+        
+        # Set default status filter if not provided
+        if status_filter is None:
+            status_filter = ['error', 'warning']
+        
+        # First check if Trusted Advisor is accessible
+        ta_status = await check_trusted_advisor(region, session, ctx)
+        if not ta_status.get('enabled', False):
+            print(f"[DEBUG:TrustedAdvisor] Trusted Advisor is not fully accessible")
+            return {
+                'enabled': False,
+                'message': ta_status.get('message', 'AWS Trusted Advisor is not accessible'),
+                'findings': [],
+                'support_tier': ta_status.get('support_tier', 'Unknown')
+            }
+        
+        # Create Support client (Trusted Advisor API is only available in us-east-1)
+        support_client = session.client('support', region_name='us-east-1')
+        
+        # Get all available checks
+        print(f"[DEBUG:TrustedAdvisor] Getting all available checks")
+        checks_response = support_client.describe_trusted_advisor_checks(language='en')
+        all_checks = checks_response.get('checks', [])
+        
+        # Filter checks by category if specified
+        filtered_checks = all_checks
+        if category_filter:
+            filtered_checks = [check for check in all_checks if check.get('category', '').lower() == category_filter.lower()]
+            print(f"[DEBUG:TrustedAdvisor] Filtered to {len(filtered_checks)} {category_filter} checks")
+        
+        # Limit the number of checks to process based on max_findings
+        checks_to_process = filtered_checks[:max_findings]
+        
+        # Get check results
+        findings = []
+        for check in checks_to_process:
+            check_id = check.get('id')
+            if not check_id:
+                continue
+                
+            try:
+                print(f"[DEBUG:TrustedAdvisor] Getting results for check: {check.get('name')} ({check_id})")
+                result = support_client.describe_trusted_advisor_check_result(
+                    checkId=check_id,
+                    language='en'
+                )
+                
+                # Extract the result
+                check_result = result.get('result', {})
+                status = check_result.get('status', '').lower()
+                
+                # Skip checks that don't match the status filter
+                if status_filter and status not in status_filter:
+                    print(f"[DEBUG:TrustedAdvisor] Skipping check with status '{status}' (not in {status_filter})")
+                    continue
+                
+                # Format the finding
+                finding = {
+                    'check_id': check_id,
+                    'name': check.get('name'),
+                    'description': check.get('description'),
+                    'category': check.get('category'),
+                    'status': status,
+                    'timestamp': check_result.get('timestamp'),
+                    'resources_flagged': check_result.get('resourcesSummary', {}).get('resourcesFlagged', 0),
+                    'resources_processed': check_result.get('resourcesSummary', {}).get('resourcesProcessed', 0),
+                    'resources_suppressed': check_result.get('resourcesSummary', {}).get('resourcesSuppressed', 0),
+                    'flagged_resources': []
+                }
+                
+                # Add flagged resources
+                flagged_resources = check_result.get('flaggedResources', [])
+                for resource in flagged_resources:
+                    # Clean up the resource data
+                    resource_data = _clean_datetime_objects(resource)
+                    finding['flagged_resources'].append(resource_data)
+                
+                findings.append(finding)
+                print(f"[DEBUG:TrustedAdvisor] Added finding: {finding['name']} (status: {finding['status']}, resources: {finding['resources_flagged']})")
+                
+            except Exception as check_error:
+                print(f"[DEBUG:TrustedAdvisor] Error getting results for check {check_id}: {check_error}")
+                await ctx.warning(f"Error getting results for Trusted Advisor check {check_id}: {check_error}")
+        
+        # Generate summary
+        summary = _summarize_trusted_advisor_findings(findings)
+        
+        return {
+            'enabled': True,
+            'message': f'Retrieved {len(findings)} Trusted Advisor findings',
+            'findings': findings,
+            'summary': summary,
+            'support_tier': ta_status.get('support_tier', 'Unknown')
+        }
+        
+    except Exception as e:
+        await ctx.error(f'Error getting Trusted Advisor findings: {e}')
+        return {
+            'enabled': True,
+            'error': str(e),
+            'message': 'Error getting Trusted Advisor findings',
+            'findings': []
+        }
+
+
+def _summarize_trusted_advisor_findings(findings: List[Dict]) -> Dict:
+    """Generate a summary of Trusted Advisor findings.
+    
+    Args:
+        findings: List of Trusted Advisor finding dictionaries
+        
+    Returns:
+        Dictionary with summary information
+    """
+    summary = {
+        'total_count': len(findings),
+        'status_counts': {
+            'error': 0,
+            'warning': 0,
+            'ok': 0,
+            'not_available': 0
+        },
+        'category_counts': {},
+        'resources_flagged': 0
+    }
+    
+    for finding in findings:
+        # Count by status
+        status = finding.get('status', '').lower()
+        if status in summary['status_counts']:
+            summary['status_counts'][status] += 1
+        else:
+            summary['status_counts']['not_available'] += 1
+            
+        # Count by category
+        category = finding.get('category', 'unknown')
+        if category in summary['category_counts']:
+            summary['category_counts'][category] += 1
+        else:
+            summary['category_counts'][category] = 1
+            
+        # Count total flagged resources
+        summary['resources_flagged'] += finding.get('resources_flagged', 0)
+    
+    return summary
