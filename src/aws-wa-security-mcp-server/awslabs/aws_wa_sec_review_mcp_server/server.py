@@ -9,7 +9,7 @@
 # OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
 
-"""AWS Security Pillar MCP Server implementation."""
+"""AWS Security Pillar Review MCP Server implementation."""
 
 import argparse
 import os
@@ -66,7 +66,7 @@ logger.add(sys.stderr, level=os.getenv("FASTMCP_LOG_LEVEL", "DEBUG"))
 
 # Initialize MCP Server
 mcp = FastMCP(
-    "aws-security-pillar-mcp-server",
+    "aws-wa-sec-review-mcp-server",
     dependencies=[
         'boto3', 
         'requests', 

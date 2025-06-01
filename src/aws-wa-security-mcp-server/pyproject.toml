@@ -23,4 +23,4 @@ dev = [
 packages = {find = {where = ["."]}}
 
 [project.entry-points.mcp]
-aws-security-pillar-mcp-server = "server:mcp"
+aws-wa-sec-review-mcp-server = "server:mcp"
