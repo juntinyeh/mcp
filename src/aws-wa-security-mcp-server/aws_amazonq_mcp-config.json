@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "aws-wa-sec-review-mcp-server":{
+      "command": "python3",
+      "args": ["/<WOKRSPACE_PATH>/aws-wa-security-mcp-server/awslabs/aws_wa_sec_review_mcp_server/main.py"],
+      "env": {
+        "AWS_REGION": "us-east-1",
+        "AWS_PROFILE": "default"
+      }
+    }
+  }
+}
