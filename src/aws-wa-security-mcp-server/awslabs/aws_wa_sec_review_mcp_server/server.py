@@ -14,6 +14,7 @@
 import argparse
 import os
 import sys
+import json
 import datetime
 from loguru import logger
 from mcp.server.fastmcp import Context, FastMCP
@@ -467,66 +468,6 @@ async def get_security_findings(
         print(f"ERROR: Error retrieving {service} findings: {e}")
         raise e
 
-@mcp.tool(name='GetResourceComplianceStatus')
-async def get_resource_compliance(
-    ctx: Context,
-    region: str = Field(
-        AWS_REGION, 
-        description="AWS region where the resource is located"
-    ),
-    resource_id: str = Field(
-        ...,
-        description="The resource identifier (e.g., i-1234567890abcdef0, my-bucket-name)"
-    ),
-    resource_type: str = Field(
-        ...,
-        description="The AWS resource type (e.g., ec2-instance, s3-bucket, iam-role)"
-    ),
-    aws_profile: Optional[str] = Field(
-        AWS_PROFILE,
-        description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable)"
-    )
-) -> Dict:
-    """Get compliance information for a specific AWS resource.
-
-    This tool checks the compliance status of an AWS resource against deployed AWS Config rules.
-    It provides details about rule compliance, configuration history, and remediation guidance.
-    
-    ## Response format
-    Returns a dictionary with:
-    - resource_id: The resource identifier
-    - type: The resource type
-    - compliance_status: Overall compliance status (COMPLIANT, NON_COMPLIANT, UNKNOWN, ERROR)
-    - compliance_by_rule: Compliance details for each applicable rule
-    - configuration: Resource configuration details
-    
-    ## AWS permissions required
-    - config:GetResourceConfigHistory
-    - config:GetComplianceDetailsByResource
-    """
-    try:
-        # Use the provided AWS profile or default to 'default'
-        profile_name = aws_profile or 'default'
-        
-        # Create a session using the specified profile
-        session = boto3.Session(profile_name=profile_name)
-        
-        print(f"Getting compliance status for {resource_type} {resource_id}...")
-        
-        # This is a placeholder implementation since we don't have the actual get_resource_compliance_status function
-        return {
-            'resource_id': resource_id,
-            'type': resource_type,
-            'compliance_status': 'UNKNOWN',
-            'message': 'Resource compliance checking not fully implemented yet',
-            'region': region
-        }
-    
-    except Exception as e:
-        # Log error
-        print(f"ERROR: Error getting compliance status: {e}")
-        raise e
-
 
 @mcp.tool(name='GetStoredSecurityContext')
 async def get_stored_security_context(
@@ -586,453 +527,102 @@ async def get_stored_security_context(
     print(f"Retrieved stored security services data for region: {region}")
     return response
 
-@mcp.tool(name='ExploreAwsResources')
-async def explore_aws_resources(
-    ctx: Context,
-    region: str = Field(
-        AWS_REGION, 
-        description="AWS region to explore resources in"
-    ),
-    services: List[str] = Field(
-        ...,
-        description="List of AWS services to explore (e.g., ['ec2', 's3', 'rds', 'lambda'])"
-    ),
-    include_summary: bool = Field(
-        True,
-        description="Whether to include a resource summary"
-    ),
-    search_tag_key: Optional[str] = Field(
-        None,
-        description="Optional tag key to filter resources by"
-    ),
-    search_tag_value: Optional[str] = Field(
-        None,
-        description="Optional tag value to filter resources by (used with search_tag_key)"
-    ),
-    aws_profile: Optional[str] = Field(
-        AWS_PROFILE,
-        description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable)"
-    )
-) -> Dict:
-    """Explore AWS resources in a specified region across multiple services.
 
-    This tool provides a comprehensive inventory of AWS resources within the specified region,
-    allowing you to understand what resources are deployed and how they are configured.
-    It can be used for security assessment, cost analysis, or general infrastructure auditing.
+@mcp.prompt(name='wa-sec-precheck')
+async def security_assessment_precheck(ctx: Context) -> str:
+    """Provides guidance on using CheckSecurityServices and GetSecurityFindings tools in sequence
+    for a comprehensive AWS security assessment.
     
-    ## Response format
-    Returns a dictionary with:
-    - region: The region that was explored
-    - resources: Resource details organized by service and resource type
-    - summary: Resource count summary (if include_summary is True)
-    - tagged_resources: Resources matching the specified tags (if search_tag_key is provided)
+    This prompt explains the recommended workflow for assessing AWS security services and findings:
+    1. First, check which security services are enabled using CheckSecurityServices
+    2. Then, retrieve findings from the enabled services using GetSecurityFindings
     
-    ## AWS permissions required
-    - Read permissions for each service being explored (e.g., ec2:Describe*, s3:List*, rds:Describe*)
-    - resourcegroupstaggingapi:GetResources (if using tag filtering)
+    Following this sequence ensures efficient API usage and provides a structured approach to security assessment.
     """
-    try:
-        print("Starting resource exploration...")
-        
-        # Use the provided AWS profile or default to 'default'
-        profile_name = aws_profile or 'default'
-        
-        # Create a session using the specified profile
-        session = boto3.Session(profile_name=profile_name)
-        
-        # Validate services
-        valid_services = [
-            's3', 'ec2', 'rds', 'lambda', 'dynamodb', 'iam', 
-            'cloudfront', 'kms', 'sns', 'sqs', 'cloudwatch'
-        ]
-        
-        for service in services:
-            if service not in valid_services and service not in SERVICE_DESCRIPTIONS:
-                print(f"WARNING: Service '{service}' may not be supported. Supported services: {', '.join(valid_services)}")
-        
-        # This is a placeholder implementation since we don't have the resource_utils functions yet
-        print(f"Exploring resources across {len(services)} services in {region}...")
-        
-        # Mock the response with placeholder data
-        resources_by_service = {}
-        for service in services:
-            resources_by_service[service] = {
-                f"{service}_resources": [
-                    {"id": f"placeholder-{service}-1", "type": f"{service}_resource", "name": f"Sample {service.upper()} Resource 1"},
-                    {"id": f"placeholder-{service}-2", "type": f"{service}_resource", "name": f"Sample {service.upper()} Resource 2"}
-                ]
-            }
-        
-        # Prepare response with placeholder data
-        response = {
-            'region': region,
-            'services_explored': services,
-            'resources': resources_by_service,
-            'message': 'Resource exploration functionality not fully implemented yet',
-            'summary': {
-                'total_resources': sum(len(res_list) for svc in resources_by_service.values() 
-                                    for res_type, res_list in svc.items()),
-                'resources_by_service': {svc: len(resources) for svc, resources in resources_by_service.items()}
-            }
-        }
-        
-        print("Resource exploration complete")
-        return response
-        
-    except Exception as e:
-        # Log error
-        print(f"ERROR: Error exploring AWS resources: {e}")
-        raise e
+    return """
+# AWS Security Assessment Workflow Guide
 
-@mcp.tool(name='AnalyzeSecurityPosture')
-async def analyze_security_posture(
-    ctx: Context,
-    regions: List[str] = Field(
-        [AWS_REGION], 
-        description="AWS regions to analyze (e.g., ['us-east-1', 'eu-west-1'])"
-    ),
-    services: Optional[List[str]] = Field(
-        None, 
-        description="""Optional list of AWS services to focus on.
-        If not specified, all relevant security services will be analyzed.
-        Common values include: 's3', 'ec2', 'rds', 'iam', 'lambda'"""
-    ),
-    aws_profile: Optional[str] = Field(
-        AWS_PROFILE, 
-        description="Optional AWS profile to use for authentication"
-    ),
-    debug: bool = Field(
-        False,
-        description="Enable detailed debug output for each analysis phase"
-    )
-) -> Dict:
-    """Analyze AWS security posture against Well-Architected Framework Security Pillar.
-    
-    This tool performs a comprehensive security assessment of your AWS environment by:
-    1. Integrating with AWS security services (Security Hub, GuardDuty, etc.)
-    2. Dynamically discovering resources that need security evaluation
-    3. Analyzing security gaps and applying Well-Architected best practices
-    4. Generating a detailed remediation plan with potential impact analysis
-    
-    ## Progress updates
-    The tool provides progress updates during the analysis process.
-    
-    ## Response format
-    Returns a dictionary with:
-    - security_assessment: Detailed security findings and recommendations
-    - remediation_plan: Actionable steps to improve security posture
-    - resources_analyzed: Count of AWS resources analyzed
-    - findings_count: Total number of security findings
-    - debug_output: (If debug=True) Detailed output from each phase of analysis
-    
-    ## Required AWS permissions
-    This tool requires read-only permissions to analyze the specified services.
-    For specific IAM policies, refer to the AWS documentation for each service.
-    """
-    try:
-        # Create a debug output dictionary if debug is enabled
-        debug_output = {} if debug else None
-        
-        # Try to import necessary components with fallbacks
-        try:
-            from core.dynamic_scanner import DynamicScanner
-            from rules.rule_generator import DynamicRuleGenerator
-            from integrations.security_services import SecurityServicesIntegration
-            from integrations.gap_analyzer import GapAnalyzer
-            from remediation.remediation_generator import RemediationGenerator
-            from reporting.report_generator import ReportGenerator
-        except ImportError as e:
-            print(f"WARNING: Could not import required modules: {e}")
-            print("Using placeholder implementations for missing modules")
-            
-            # Define placeholder classes
-            class DynamicScanner:
-                def __init__(self, session):
-                    self.session = session
-                
-                async def scan_environment(self, regions, services):
-                    print(f"Placeholder: Scanning {len(regions)} regions for {services if services else 'all'} services")
-                    return {region: {} for region in regions}
-            
-            class DynamicRuleGenerator:
-                async def generate_rules(self, service, resources):
-                    print(f"Placeholder: Generating rules for {service}")
-                    return []
-            
-            class SecurityServicesIntegration:
-                def __init__(self, session):
-                    self.session = session
-                
-                async def gather_findings(self, regions):
-                    print(f"Placeholder: Gathering findings from {len(regions)} regions")
-                    return {region: {} for region in regions}
-            
-            class GapAnalyzer:
-                async def analyze_gaps(self, findings, resources):
-                    print("Placeholder: Analyzing security gaps")
-                    return {region: {} for region in findings.keys()}
-            
-            class RemediationGenerator:
-                def __init__(self, session):
-                    self.session = session
-                
-                async def generate_remediation_plan(self, findings, with_dry_run=True):
-                    print("Placeholder: Generating remediation plan")
-                    return {"recommendations": [], "message": "Remediation plan generation not fully implemented"}
-            
-            class ReportGenerator:
-                async def generate_report(self, findings):
-                    print("Placeholder: Generating security assessment report")
-                    return {"findings_summary": "Security assessment not fully implemented"}
-        
-        # Log analysis start
-        print(f"Starting security posture analysis for regions: {', '.join(regions)}")
-        print(f"[DEBUG] Starting security posture analysis for regions: {', '.join(regions)}")
-        
-        # Create session
-        session_start_time = datetime.datetime.now()
-        session = boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
-        print(f"[DEBUG] Session created with profile: {aws_profile if aws_profile else 'default'}")
-        
-        # Phase 1: Security Services Integration
-        phase1_start_time = datetime.datetime.now()
-        print("Phase 1: Gathering findings from AWS security services...")
-        print(f"[DEBUG] Phase 1: Security Services Integration started at {phase1_start_time}")
-        
-        security_services = SecurityServicesIntegration(session)
-        native_findings = await security_services.gather_findings(regions)
-        
-        phase1_end_time = datetime.datetime.now()
-        phase1_duration = (phase1_end_time - phase1_start_time).total_seconds()
-        
-        # Debug output for Phase 1
-        if debug:
-            findings_counts = {}
-            for region in regions:
-                regional_count = sum(len(findings) for findings in native_findings.get(region, {}).values())
-                findings_counts[region] = regional_count
-            
-            debug_output['phase1'] = {
-                'start_time': str(phase1_start_time),
-                'end_time': str(phase1_end_time),
-                'duration_seconds': phase1_duration,
-                'findings_per_region': findings_counts,
-                'total_findings': sum(findings_counts.values())
-            }
-        
-        print(f"[DEBUG] Phase 1 completed in {phase1_duration:.2f} seconds. Found findings in {len(native_findings)} regions.")
-        
-        # Phase 2: Dynamic Resource Discovery
-        phase2_start_time = datetime.datetime.now()
-        print("Phase 2: Discovering AWS resources...")
-        print(f"[DEBUG] Phase 2: Dynamic Resource Discovery started at {phase2_start_time}")
-        
-        scanner = DynamicScanner(session)
-        discovered_resources = await scanner.scan_environment(regions, services)
-        
-        phase2_end_time = datetime.datetime.now()
-        phase2_duration = (phase2_end_time - phase2_start_time).total_seconds()
-        
-        # Debug output for Phase 2
-        if debug:
-            resource_counts = {}
-            for region, region_resources in discovered_resources.items():
-                regional_count = sum(
-                    len(resources) for service in region_resources.values() 
-                    for resource_type, resources in service.items()
-                )
-                resource_counts[region] = regional_count
-            
-            debug_output['phase2'] = {
-                'start_time': str(phase2_start_time),
-                'end_time': str(phase2_end_time),
-                'duration_seconds': phase2_duration,
-                'resources_per_region': resource_counts,
-                'total_resources': sum(resource_counts.values()),
-                'services_scanned': list(set(
-                    service for region_resources in discovered_resources.values() 
-                    for service in region_resources.keys()
-                ))
-            }
-        
-        print(f"[DEBUG] Phase 2 completed in {phase2_duration:.2f} seconds. Discovered resources in {len(discovered_resources)} regions.")
-        
-        # Phase 3: Gap Analysis
-        phase3_start_time = datetime.datetime.now()
-        print("Phase 3: Performing gap analysis...")
-        print(f"[DEBUG] Phase 3: Gap Analysis started at {phase3_start_time}")
-        
-        gap_analyzer = GapAnalyzer()
-        gaps = await gap_analyzer.analyze_gaps(native_findings, discovered_resources)
-        
-        phase3_end_time = datetime.datetime.now()
-        phase3_duration = (phase3_end_time - phase3_start_time).total_seconds()
-        
-        # Debug output for Phase 3
-        if debug:
-            gap_counts = {}
-            for region, region_gaps in gaps.items():
-                regional_count = sum(len(resources) for resources in region_gaps.values())
-                gap_counts[region] = regional_count
-            
-            debug_output['phase3'] = {
-                'start_time': str(phase3_start_time),
-                'end_time': str(phase3_end_time),
-                'duration_seconds': phase3_duration,
-                'gaps_per_region': gap_counts,
-                'total_gaps': sum(gap_counts.values()),
-            }
-        
-        print(f"[DEBUG] Phase 3 completed in {phase3_duration:.2f} seconds. Identified gaps in {len(gaps)} regions.")
-        
-        # Phase 4: Dynamic Rule Generation and Application
-        phase4_start_time = datetime.datetime.now()
-        print("Phase 4: Generating and applying security rules...")
-        print(f"[DEBUG] Phase 4: Rule Generation and Application started at {phase4_start_time}")
-        
-        rule_generator = DynamicRuleGenerator()
-        scanner_findings = {}
-        rule_count = 0
-        
-        # Generate and apply rules for gaps
-        for region, region_gaps in gaps.items():
-            scanner_findings[region] = {}
-            for service, service_resources in region_gaps.items():
-                # Generate rules for this service
-                rules = await rule_generator.generate_rules(service, service_resources)
-                rule_count += len(rules)
-                
-                # # Register with rule catalog - will be implemented later
-                # for rule in rules:
-                #     rule_catalog.register_rule(rule)
-                
-                # # Apply rules to resources - will be implemented later
-                # service_findings = await rule_catalog.evaluate_resources(service, service_resources)
-                
-                # Placeholder until rule_catalog is implemented
-                service_findings = []
-                scanner_findings[region][service] = service_findings
-        
-        phase4_end_time = datetime.datetime.now()
-        phase4_duration = (phase4_end_time - phase4_start_time).total_seconds()
-        
-        # Debug output for Phase 4
-        if debug:
-            finding_counts = {}
-            for region, region_findings in scanner_findings.items():
-                regional_count = sum(len(findings) for findings in region_findings.values())
-                finding_counts[region] = regional_count
-            
-            debug_output['phase4'] = {
-                'start_time': str(phase4_start_time),
-                'end_time': str(phase4_end_time),
-                'duration_seconds': phase4_duration,
-                'rules_generated': rule_count,
-                'findings_per_region': finding_counts,
-                'total_findings': sum(finding_counts.values()),
-            }
-        
-        print(f"[DEBUG] Phase 4 completed in {phase4_duration:.2f} seconds. Generated {rule_count} rules.")
-        
-        # Phase 5: Consolidate Findings
-        phase5_start_time = datetime.datetime.now()
-        print(f"[DEBUG] Phase 5: Consolidating Findings started at {phase5_start_time}")
-        
-        # Consolidate findings
-        all_findings = {}
-        for region in regions:
-            all_findings[region] = {}
-            # Add native findings
-            for service, findings in native_findings.get(region, {}).items():
-                all_findings[region][service] = findings
-            # Add scanner findings
-            for service, findings in scanner_findings.get(region, {}).items():
-                if service in all_findings[region]:
-                    all_findings[region][service].extend(findings)
-                else:
-                    all_findings[region][service] = findings
-        
-        phase5_end_time = datetime.datetime.now()
-        phase5_duration = (phase5_end_time - phase5_start_time).total_seconds()
-        print(f"[DEBUG] Phase 5 completed in {phase5_duration:.2f} seconds.")
-        
-        # Phase 6: Report Generation
-        phase6_start_time = datetime.datetime.now()
-        print("Phase 6: Generating security assessment report...")
-        print(f"[DEBUG] Phase 6: Report Generation started at {phase6_start_time}")
-        
-        report_generator = ReportGenerator()
-        report = await report_generator.generate_report(all_findings)
-        
-        phase6_end_time = datetime.datetime.now()
-        phase6_duration = (phase6_end_time - phase6_start_time).total_seconds()
-        
-        if debug:
-            debug_output['phase6'] = {
-                'start_time': str(phase6_start_time),
-                'end_time': str(phase6_end_time),
-                'duration_seconds': phase6_duration,
-            }
-        
-        print(f"[DEBUG] Phase 6 completed in {phase6_duration:.2f} seconds.")
-        
-        # Phase 7: Remediation Plan Generation
-        phase7_start_time = datetime.datetime.now()
-        print("Phase 7: Creating remediation plan...")
-        print(f"[DEBUG] Phase 7: Remediation Plan Generation started at {phase7_start_time}")
-        
-        remediation_generator = RemediationGenerator(session)
-        remediation_plan = await remediation_generator.generate_remediation_plan(
-            all_findings, with_dry_run=True
-        )
-        
-        phase7_end_time = datetime.datetime.now()
-        phase7_duration = (phase7_end_time - phase7_start_time).total_seconds()
-        
-        if debug:
-            debug_output['phase7'] = {
-                'start_time': str(phase7_start_time),
-                'end_time': str(phase7_end_time),
-                'duration_seconds': phase7_duration,
-            }
-        
-        print(f"[DEBUG] Phase 7 completed in {phase7_duration:.2f} seconds.")
-        
-        # Calculate final metrics
-        resource_count = sum(
-            len(resources) for region in discovered_resources.values() 
-            for service in region.values() 
-            for resource_type, resources in service.items()
-        )
-        
-        findings_count = sum(
-            len(findings) for region in all_findings.values() 
-            for service in region.values() 
-            for findings in service.values()
-        )
-        
-        total_duration = (datetime.datetime.now() - session_start_time).total_seconds()
-        print(f"[DEBUG] Security posture analysis completed in {total_duration:.2f} seconds.")
-        print(f"[DEBUG] Analyzed {resource_count} resources and found {findings_count} security findings.")
-        
-        # Prepare final response
-        response = {
-            "security_assessment": report,
-            "remediation_plan": remediation_plan,
-            "resources_analyzed": resource_count,
-            "findings_count": findings_count
+This guide will help you assess your AWS security posture by checking which security services are enabled and retrieving findings from those services.
+
+## Step 1: Check Security Services Status
+
+First, use the `CheckSecurityServices` tool to determine which AWS security services are enabled in your account:
+
+```python
+result = await use_mcp_tool(
+    server_name="aws-wa-sec-review-mcp-server",
+    tool_name="CheckSecurityServices",
+    arguments={
+        "region": "us-east-1",  # Specify your AWS region
+        "services": ["guardduty", "inspector", "accessanalyzer", "securityhub", "trustedadvisor"],
+        "aws_profile": "default",  # Optional: specify your AWS profile
+        "store_in_context": True  # Important: store results for later use
+    }
+)
+```
+
+This will check the status of each security service and store the results in context for later use.
+
+## Step 2: Analyze the Results
+
+Review the results to see which services are enabled:
+
+```python
+enabled_services = []
+for service, status in result['service_statuses'].items():
+    if status.get('enabled', False):
+        enabled_services.append(service)
+        print(f"✅ {service} is enabled")
+    else:
+        print(f"❌ {service} is not enabled")
+```
+
+## Step 3: Retrieve Findings from Enabled Services
+
+For each enabled service, use the `GetSecurityFindings` tool to retrieve findings:
+
+```python
+for service in enabled_services:
+    findings = await use_mcp_tool(
+        server_name="aws-wa-sec-review-mcp-server",
+        tool_name="GetSecurityFindings",
+        arguments={
+            "region": "us-east-1",  # Use the same region as in Step 1
+            "service": service,
+            "max_findings": 100,  # Adjust as needed
+            "severity_filter": "HIGH",  # Optional: filter by severity
+            "check_enabled": True  # Verify service is enabled before retrieving findings
         }
-        
-        # Add debug output if requested
-        if debug:
-            debug_output['total_duration_seconds'] = total_duration
-            response['debug_output'] = debug_output
-        
-        return response
-    except Exception as e:
-        # Log error
-        print(f"ERROR: Error analyzing security posture: {e}")
-        raise e
+    )
+    
+    # Process the findings
+    if findings.get('findings'):
+        print(f"Found {len(findings['findings'])} {service} findings")
+        # Analyze findings here
+```
+
+## Step 4: Summarize Security Posture
+
+After retrieving findings from all enabled services, summarize the security posture:
+
+```python
+total_findings = 0
+findings_by_service = {}
+
+for service in enabled_services:
+    # Get findings count for each service
+    # Implement your summary logic here
+```
+
+## Best Practices
+
+1. Always run `CheckSecurityServices` first with `store_in_context=True`
+2. Use `GetSecurityFindings` only for services that are enabled
+3. Consider filtering findings by severity to focus on high-risk issues first
+4. For large environments, process findings in batches
+
+By following this workflow, you'll efficiently assess your AWS security posture and identify potential security issues.
+"""
 
 def main():
     """Run the MCP server with CLI argument support."""
