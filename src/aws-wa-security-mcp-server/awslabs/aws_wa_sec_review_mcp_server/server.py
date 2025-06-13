@@ -1,13 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
-# with the License. A copy of the License is located at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
-# OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
-# and limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """AWS Security Pillar Review MCP Server implementation."""
 
@@ -16,64 +19,52 @@ import os
 import sys
 import json
 import datetime
+import asyncio
 from loguru import logger
 from mcp.server.fastmcp import Context, FastMCP
 from typing import Dict, List, Optional, Any, Literal
 from pydantic import Field
 import boto3
-import asyncio
 
-# Set up AWS region and profile from environment variables
-AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
-AWS_PROFILE = os.environ.get('AWS_PROFILE', 'default')
-
-# Import local modules
-from util.security_services import (
+from awslabs.aws_wa_sec_review_mcp_server.consts import INSTRUCTIONS, SERVICE_DESCRIPTIONS
+from awslabs.aws_wa_sec_review_mcp_server.util.security_services import (
     check_access_analyzer,
     check_security_hub,
     check_guard_duty,
     check_inspector,
     check_trusted_advisor,
+    check_macie,
     get_analyzer_findings_count,
     get_guardduty_findings,
     get_securityhub_findings,
     get_inspector_findings,
     get_access_analyzer_findings,
     get_trusted_advisor_findings,
+    get_macie_findings,
 )
+from awslabs.aws_wa_sec_review_mcp_server.util.storage_security import check_storage_encryption
 # These are commented out until we restore resource_utils.py functionality
-# from .util.resource_utils import (
+# from awslabs.aws_wa_sec_review_mcp_server.util.resource_utils import (
 #     list_resources_by_service,
 #     list_all_resources,
 #     resource_inventory_summary,
 #     get_tagged_resources,
 # )
 
-# Constants that might be needed
-SERVICE_DESCRIPTIONS = {
-    's3': 'Amazon S3',
-    'ec2': 'Amazon EC2',
-    'rds': 'Amazon RDS',
-    'lambda': 'AWS Lambda',
-    'iam': 'AWS IAM',
-    'cloudfront': 'Amazon CloudFront',
-    'kms': 'AWS KMS',
-    'sns': 'Amazon SNS',
-    'sqs': 'Amazon SQS',
-    'cloudwatch': 'Amazon CloudWatch',
-}
+# Set up AWS region and profile from environment variables
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+AWS_PROFILE = os.environ.get('AWS_PROFILE', 'default')
 
 # Remove default logger and add custom configuration
 logger.remove()
-logger.add(sys.stderr, level=os.getenv("FASTMCP_LOG_LEVEL", "DEBUG"))
+logger.add(sys.stderr, level=os.getenv("FASTMCP_LOG_LEVEL", "WARNING"))
 
 # Initialize MCP Server
 mcp = FastMCP(
     "aws-wa-sec-review-mcp-server",
+    instructions=INSTRUCTIONS,
     dependencies=[
         'boto3', 
-        'requests', 
-        'beautifulsoup4',
         'pydantic',
         'loguru',
     ],
@@ -120,8 +111,8 @@ async def check_security_services(
         description="AWS region to check for security services status"
     ),
     services: List[str] = Field(
-        ['guardduty', 'inspector', 'accessanalyzer', 'securityhub', 'trustedadvisor'], 
-        description="List of security services to check. Options: guardduty, inspector, accessanalyzer, securityhub, trustedadvisor"
+        ['guardduty', 'inspector', 'accessanalyzer', 'securityhub', 'trustedadvisor', 'macie'], 
+        description="List of security services to check. Options: guardduty, inspector, accessanalyzer, securityhub, trustedadvisor, macie"
     ),
     account_id: Optional[str] = Field(
         None, 
@@ -230,6 +221,10 @@ async def check_security_services(
                 print(f"[DEBUG:CheckSecurityServices] Calling check_trusted_advisor")
                 service_result = await check_trusted_advisor(region, session, ctx)
                 print(f"[DEBUG:CheckSecurityServices] check_trusted_advisor returned: enabled={service_result.get('enabled', False)}")
+            elif service_name.lower() == 'macie':
+                print(f"[DEBUG:CheckSecurityServices] Calling check_macie")
+                service_result = await check_macie(region, session, ctx)
+                print(f"[DEBUG:CheckSecurityServices] check_macie returned: enabled={service_result.get('enabled', False)}")
             else:
                 # Log warning
                 print(f"WARNING: Unknown service: {service_name}. Skipping.")
@@ -301,7 +296,7 @@ async def get_security_findings(
     ),
     service: str = Field(
         ...,
-        description="Security service to retrieve findings from ('guardduty', 'securityhub', 'inspector', 'accessanalyzer', 'trustedadvisor')"
+        description="Security service to retrieve findings from ('guardduty', 'securityhub', 'inspector', 'accessanalyzer', 'trustedadvisor', 'macie')"
     ),
     max_findings: int = Field(
         100,
@@ -348,9 +343,9 @@ async def get_security_findings(
         service_name = service.lower()
         
         # Check if service is supported
-        if service_name not in ['guardduty', 'securityhub', 'inspector', 'accessanalyzer', 'trustedadvisor']:
+        if service_name not in ['guardduty', 'securityhub', 'inspector', 'accessanalyzer', 'trustedadvisor', 'macie']:
             raise ValueError(f"Unsupported security service: {service}. " + 
-                          "Supported services are: guardduty, securityhub, inspector, accessanalyzer, trustedadvisor")
+                          "Supported services are: guardduty, securityhub, inspector, accessanalyzer, trustedadvisor, macie")
         
         # Get context key for security services data
         context_key = f"security_services_{region}"
@@ -449,6 +444,9 @@ async def get_security_findings(
                 status_filter=status_filter,
                 category_filter='security'
             )
+        elif service_name == 'macie':
+            print(f"Retrieving Macie findings from {region}...")
+            result = await get_macie_findings(region, session, ctx, max_findings, filter_criteria)
         
         # Add service info to result
         result['service'] = service_name
@@ -527,6 +525,85 @@ async def get_stored_security_context(
     print(f"Retrieved stored security services data for region: {region}")
     return response
 
+
+@mcp.tool(name='CheckStorageEncryption')
+async def check_storage_encryption_tool(
+    ctx: Context,
+    region: str = Field(
+        AWS_REGION, 
+        description="AWS region to check storage resources in"
+    ),
+    services: List[str] = Field(
+        ['s3', 'ebs', 'rds', 'dynamodb', 'efs', 'elasticache'], 
+        description="List of storage services to check. Options: s3, ebs, rds, dynamodb, efs, elasticache"
+    ),
+    include_unencrypted_only: bool = Field(
+        False,
+        description="Whether to include only unencrypted resources in the results"
+    ),
+    aws_profile: Optional[str] = Field(
+        AWS_PROFILE,
+        description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable or 'default')"
+    ),
+    store_in_context: bool = Field(
+        True,
+        description="Whether to store results in context for access by other tools"
+    )
+) -> Dict:
+    """Check if AWS storage resources have encryption enabled.
+    
+    This tool identifies storage resources using Resource Explorer and checks if they
+    are properly configured for data protection at rest according to AWS Well-Architected
+    Framework Security Pillar best practices.
+    
+    ## Response format
+    Returns a dictionary with:
+    - region: The region that was checked
+    - resources_checked: Total number of storage resources checked
+    - compliant_resources: Number of resources with proper encryption
+    - non_compliant_resources: Number of resources without proper encryption
+    - compliance_by_service: Breakdown of compliance by service type
+    - resource_details: Details about each resource checked
+    - recommendations: Recommendations for improving data protection at rest
+    
+    ## AWS permissions required
+    - resource-explorer-2:ListResources
+    - Read permissions for each storage service being analyzed (s3:GetEncryptionConfiguration, etc.)
+    """
+    try:
+        # Start timestamp for measuring execution time
+        start_time = datetime.datetime.now()
+        
+        print(f"Starting storage encryption check for region: {region}")
+        print(f"Services to check: {', '.join(services)}")
+        print(f"Using AWS profile: {aws_profile or 'default'}")
+        
+        # Use the provided AWS profile or default to 'default'
+        profile_name = aws_profile or 'default'
+        
+        # Create a session using the specified profile
+        session = boto3.Session(profile_name=profile_name)
+        
+        # Call the storage security utility function
+        results = await check_storage_encryption(region, services, session, ctx, include_unencrypted_only)
+        
+        # Store results in context if requested
+        if store_in_context:
+            context_key = f"storage_encryption_{region}"
+            context_storage[context_key] = results
+            print(f"Stored storage encryption results in context with key: {context_key}")
+        
+        return results
+    
+    except Exception as e:
+        # Log error
+        print(f"ERROR: Error checking storage encryption: {e}")
+        return {
+            'region': region,
+            'services_checked': services,
+            'error': str(e),
+            'message': 'Error checking storage encryption status.'
+        }
 
 @mcp.prompt(name='wa-sec-precheck')
 async def security_assessment_precheck(ctx: Context) -> str:
@@ -635,7 +712,7 @@ def main():
     # Initialize shared components
     asyncio.run(initialize())
 
-    logger.info(f"Starting AWS Security Pillar MCP Server")
+    logger.info("Starting AWS Security Pillar MCP Server")
     
     # Run server with appropriate transport
     if args.sse:

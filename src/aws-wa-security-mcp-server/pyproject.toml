@@ -1,5 +1,5 @@
 [project]
-name = "aws-wa-sec-review-mcp-server"
+name = "awslabs.aws-wa-sec-review-mcp-server"
 version = "0.1.0"
 description = "AWS Well-Architected Security Review MCP Server"
 readme = "README.md"
@@ -15,12 +15,41 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
-    "black>=23.0.0",
-    "isort>=5.0.0",
+    "ruff>=0.0.291",
+    "pyright>=1.1.0",
 ]
 
 [tool.setuptools]
 packages = {find = {where = ["."]}}
 
+[project.scripts]
+"awslabs.aws-wa-sec-review-mcp-server" = "awslabs.aws_wa_sec_review_mcp_server.server:main"
+
 [project.entry-points.mcp]
-aws-wa-sec-review-mcp-server = "server:mcp"
+aws-wa-sec-review-mcp-server = "awslabs.aws_wa_sec_review_mcp_server.server:mcp"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "$version"
+version_files = [
+    "pyproject.toml:version",
+    "awslabs/aws_wa_sec_review_mcp_server/__init__.py:__version__"
+]
+update_changelog_on_bump = true
+
+[tool.ruff]
+line-length = 99
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "Q"]
+ignore = ["E203", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["awslabs"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "auto"
