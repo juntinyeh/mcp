@@ -27,33 +27,36 @@ This server dynamically adapts to your AWS environment, without requiring pre-de
 
 ## Available Tools
 
-### CheckAccessAnalyzerStatus
-Verifies if IAM Access Analyzer is enabled in a specified region and provides setup guidance if needed.
-
-### CheckSecurityHubStatus
-Checks if AWS Security Hub is enabled in a specified region and lists enabled security standards.
-
-### CheckGuardDutyStatus
-Verifies if Amazon GuardDuty threat detection service is enabled and provides setup instructions if needed.
-
-### CheckInspectorStatus
-Checks if Amazon Inspector vulnerability assessment service is enabled and shows status of scan types.
-
-### ExploreAwsResources
-Provides a comprehensive inventory of AWS resources within a specified region across multiple services.
-This tool is useful for understanding what resources are deployed in your environment before conducting
-a security assessment.
+### CheckSecurityServices
+Verifies if selected AWS security services are enabled in the specified region and account.
+This consolidated tool checks the status of multiple AWS security services in a single call,
+providing a comprehensive overview of your security posture.
 
 ### GetSecurityFindings
 Retrieves security findings from various AWS security services including GuardDuty, Security Hub,
-Inspector, and IAM Access Analyzer with filtering options by severity.
+Inspector, IAM Access Analyzer, Trusted Advisor, and Macie with filtering options by severity.
+
+### CheckStorageEncryption
+Identifies storage resources using Resource Explorer and checks if they are properly configured 
+for data protection at rest according to AWS Well-Architected Framework Security Pillar best practices.
+
+### CheckNetworkSecurity
+Identifies network resources using Resource Explorer and checks if they are properly configured 
+for data protection in transit according to AWS Well-Architected Framework Security Pillar best practices.
+This tool helps ensure your network configurations follow security best practices for protecting data in transit.
+
+### GetStoredSecurityContext
+Retrieves security services data that was stored in context from a previous CheckSecurityServices call
+without making additional AWS API calls.
 
 ### GetResourceComplianceStatus
 Checks the compliance status of specific AWS resources against AWS Config rules, providing
 detailed compliance information and configuration history.
 
-### AnalyzeSecurityPosture
-Performs a comprehensive security assessment of your AWS environment against the Well-Architected Framework.
+### ExploreAwsResources
+Provides a comprehensive inventory of AWS resources within a specified region across multiple services.
+This tool is useful for understanding what resources are deployed in your environment before conducting
+a security assessment.
 
 ## Usage Guidelines
 1. Start by exploring your AWS resources to understand your environment:
@@ -61,16 +64,19 @@ Performs a comprehensive security assessment of your AWS environment against the
    - Review what services and resources are deployed in your target region
 
 2. Check if key security services are enabled:
-   - Use CheckAccessAnalyzerStatus to verify IAM Access Analyzer
-   - Use CheckSecurityHubStatus to verify Security Hub
-   - Use CheckGuardDutyStatus to verify GuardDuty
-   - Use CheckInspectorStatus to verify Amazon Inspector
+   - Use CheckSecurityServices to verify which security services are enabled
+   - Review the summary to identify which services need to be enabled
 
-3. Run a comprehensive security assessment:
-   - Use AnalyzeSecurityPosture for a thorough security evaluation
-   - Review the generated security assessment and remediation plan
+3. Assess your data protection posture:
+   - Use CheckStorageEncryption to verify encryption at rest
+   - Use CheckNetworkSecurity to verify encryption in transit
+   - Review the recommendations for improving your data protection
 
-4. Apply recommended remediation steps to improve your security posture
+4. Analyze security findings:
+   - Use GetSecurityFindings to retrieve findings from enabled security services
+   - Focus on high-severity findings first
+
+5. Apply recommended remediation steps to improve your security posture
 
 ## AWS Security Pillar
 This server aligns with the Security Pillar of the AWS Well-Architected Framework, which focuses on:

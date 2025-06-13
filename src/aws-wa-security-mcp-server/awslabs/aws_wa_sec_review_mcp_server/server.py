@@ -43,6 +43,7 @@ from awslabs.aws_wa_sec_review_mcp_server.util.security_services import (
     get_macie_findings,
 )
 from awslabs.aws_wa_sec_review_mcp_server.util.storage_security import check_storage_encryption
+from awslabs.aws_wa_sec_review_mcp_server.util.network_security import check_network_security
 # These are commented out until we restore resource_utils.py functionality
 # from awslabs.aws_wa_sec_review_mcp_server.util.resource_utils import (
 #     list_resources_by_service,
@@ -603,6 +604,85 @@ async def check_storage_encryption_tool(
             'services_checked': services,
             'error': str(e),
             'message': 'Error checking storage encryption status.'
+        }
+
+@mcp.tool(name='CheckNetworkSecurity')
+async def check_network_security_tool(
+    ctx: Context,
+    region: str = Field(
+        AWS_REGION, 
+        description="AWS region to check network resources in"
+    ),
+    services: List[str] = Field(
+        ['elb', 'vpc', 'apigateway', 'cloudfront'], 
+        description="List of network services to check. Options: elb, vpc, apigateway, cloudfront"
+    ),
+    include_non_compliant_only: bool = Field(
+        False,
+        description="Whether to include only non-compliant resources in the results"
+    ),
+    aws_profile: Optional[str] = Field(
+        AWS_PROFILE,
+        description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable or 'default')"
+    ),
+    store_in_context: bool = Field(
+        True,
+        description="Whether to store results in context for access by other tools"
+    )
+) -> Dict:
+    """Check if AWS network resources are configured for secure data-in-transit.
+    
+    This tool identifies network resources using Resource Explorer and checks if they
+    are properly configured for data protection in transit according to AWS Well-Architected
+    Framework Security Pillar best practices.
+    
+    ## Response format
+    Returns a dictionary with:
+    - region: The region that was checked
+    - resources_checked: Total number of network resources checked
+    - compliant_resources: Number of resources with proper in-transit protection
+    - non_compliant_resources: Number of resources without proper in-transit protection
+    - compliance_by_service: Breakdown of compliance by service type
+    - resource_details: Details about each resource checked
+    - recommendations: Recommendations for improving data protection in transit
+    
+    ## AWS permissions required
+    - resource-explorer-2:ListResources
+    - Read permissions for each network service being analyzed (elb:DescribeLoadBalancers, etc.)
+    """
+    try:
+        # Start timestamp for measuring execution time
+        start_time = datetime.datetime.now()
+        
+        print(f"Starting network security check for region: {region}")
+        print(f"Services to check: {', '.join(services)}")
+        print(f"Using AWS profile: {aws_profile or 'default'}")
+        
+        # Use the provided AWS profile or default to 'default'
+        profile_name = aws_profile or 'default'
+        
+        # Create a session using the specified profile
+        session = boto3.Session(profile_name=profile_name)
+        
+        # Call the network security utility function
+        results = await check_network_security(region, services, session, ctx, include_non_compliant_only)
+        
+        # Store results in context if requested
+        if store_in_context:
+            context_key = f"network_security_{region}"
+            context_storage[context_key] = results
+            print(f"Stored network security results in context with key: {context_key}")
+        
+        return results
+    
+    except Exception as e:
+        # Log error
+        print(f"ERROR: Error checking network security: {e}")
+        return {
+            'region': region,
+            'services_checked': services,
+            'error': str(e),
+            'message': 'Error checking network security status.'
         }
 
 @mcp.prompt(name='wa-sec-precheck')
