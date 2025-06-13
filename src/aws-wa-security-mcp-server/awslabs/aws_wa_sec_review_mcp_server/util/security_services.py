@@ -1442,3 +1442,213 @@ def _summarize_trusted_advisor_findings(findings: List[Dict]) -> Dict:
         summary['resources_flagged'] += finding.get('resources_flagged', 0)
     
     return summary
+
+
+async def check_macie(region: str, session: boto3.Session, ctx: Context) -> Dict:
+    """Check if Amazon Macie is enabled in the specified region.
+    
+    Args:
+        region: AWS region to check
+        session: boto3 Session for AWS API calls
+        ctx: MCP context for error reporting
+        
+    Returns:
+        Dictionary with status information about Amazon Macie
+    """
+    try:
+        print(f"[DEBUG:Macie] Starting Macie check for region: {region}")
+        # Create Macie client
+        macie_client = session.client('macie2', region_name=region)
+        
+        # Check if Macie is enabled
+        try:
+            print(f"[DEBUG:Macie] Calling get_macie_session() API")
+            status = macie_client.get_macie_session()
+            print(f"[DEBUG:Macie] get_macie_session() successful, status: {status.get('status')}")
+            
+            # If we get here without exception, Macie is enabled
+            return {
+                'enabled': True,
+                'status': status.get('status'),
+                'created_at': str(status.get('createdAt')),
+                'service_role': status.get('serviceRole'),
+                'finding_publishing_frequency': status.get('findingPublishingFrequency'),
+                'message': 'Amazon Macie is enabled in this region.'
+            }
+        except macie_client.exceptions.AccessDeniedException as e:
+            print(f"[DEBUG:Macie] AccessDeniedException indicates Macie is not enabled: {e}")
+            # Macie is not enabled or permissions issue
+            return {
+                'enabled': False,
+                'setup_instructions': """
+                # Amazon Macie Setup Instructions
+                
+                Amazon Macie is not enabled in this region. To enable it:
+                
+                1. Open the Macie console: https://console.aws.amazon.com/macie/
+                2. Choose Get Started
+                3. Configure your settings and choose Enable Macie
+                
+                This is recommended for discovering and protecting sensitive data in S3 buckets.
+                
+                Learn more: https://docs.aws.amazon.com/macie/latest/user/getting-started.html
+                """,
+                'message': 'Amazon Macie is not enabled in this region.'
+            }
+    except Exception as e:
+        await ctx.error(f'Error checking Macie status: {e}')
+        return {
+            'enabled': False,
+            'error': str(e),
+            'message': 'Error checking Macie status.',
+            'debug_info': {
+                'exception': str(e),
+                'exception_type': type(e).__name__
+            }
+        }
+
+
+async def get_macie_findings(region: str, session: boto3.Session, ctx: Context, max_findings: int = 100, filter_criteria: Optional[Dict] = None) -> Dict:
+    """Get findings from Amazon Macie in the specified region.
+    
+    Args:
+        region: AWS region to get findings from
+        session: boto3 Session for AWS API calls
+        ctx: MCP context for error reporting
+        max_findings: Maximum number of findings to return (default: 100)
+        filter_criteria: Optional filter criteria for findings
+        
+    Returns:
+        Dictionary containing Macie findings
+    """
+    try:
+        print(f"[DEBUG:Macie] Starting findings retrieval for region: {region}")
+        # First check if Macie is enabled
+        macie_status = await check_macie(region, session, ctx)
+        if not macie_status.get('enabled', False):
+            print(f"[DEBUG:Macie] Macie is not enabled in {region}")
+            return {
+                'enabled': False,
+                'message': 'Amazon Macie is not enabled in this region',
+                'findings': []
+            }
+            
+        # Create Macie client
+        macie_client = session.client('macie2', region_name=region)
+        
+        # Set up default finding criteria if none provided
+        if filter_criteria is None:
+            print("[DEBUG:Macie] No filter criteria provided, creating default criteria")
+            # By default, get findings with high severity
+            filter_criteria = {
+                'criterion': {
+                    'severity.score': {
+                        'gt': 7
+                    }
+                }
+            }
+        else:
+            print(f"[DEBUG:Macie] Using provided filter criteria: {json.dumps(filter_criteria)}")
+            
+        # List findings with the filter criteria
+        print(f"[DEBUG:Macie] Calling list_findings with max results: {max_findings}")
+        findings_response = macie_client.list_findings(
+            findingCriteria=filter_criteria,
+            maxResults=max_findings
+        )
+        
+        finding_ids = findings_response.get('findingIds', [])
+        print(f"[DEBUG:Macie] Retrieved {len(finding_ids)} finding IDs")
+        
+        if not finding_ids:
+            print("[DEBUG:Macie] No findings match the filter criteria")
+            return {
+                'enabled': True,
+                'message': 'No Macie findings match the filter criteria',
+                'findings': []
+            }
+            
+        # Get finding details
+        print(f"[DEBUG:Macie] Retrieving details for {len(finding_ids)} findings")
+        findings_details = macie_client.get_findings(
+            findingIds=finding_ids
+        )
+        
+        # Process findings to clean up non-serializable objects (like datetime)
+        findings = []
+        raw_findings_count = len(findings_details.get('findings', []))
+        print(f"[DEBUG:Macie] Processing {raw_findings_count} findings from get_findings response")
+        
+        for finding in findings_details.get('findings', []):
+            # Convert datetime objects to strings
+            finding = _clean_datetime_objects(finding)
+            findings.append(finding)
+        
+        print(f"[DEBUG:Macie] Successfully processed {len(findings)} findings")
+        
+        # Generate summary
+        summary = _summarize_macie_findings(findings)
+        print(f"[DEBUG:Macie] Generated summary with {summary['total_count']} findings")
+        
+        return {
+            'enabled': True,
+            'message': f'Retrieved {len(findings)} Macie findings',
+            'findings': findings,
+            'summary': summary
+        }
+    except Exception as e:
+        await ctx.error(f'Error getting Macie findings: {e}')
+        return {
+            'enabled': True,
+            'error': str(e),
+            'message': 'Error getting Macie findings',
+            'findings': []
+        }
+
+
+def _summarize_macie_findings(findings: List[Dict]) -> Dict:
+    """Generate a summary of Macie findings.
+    
+    Args:
+        findings: List of Macie finding dictionaries
+        
+    Returns:
+        Dictionary with summary information
+    """
+    summary = {
+        'total_count': len(findings),
+        'severity_counts': {
+            'high': 0,
+            'medium': 0,
+            'low': 0
+        },
+        'type_counts': {},
+        'bucket_counts': {}
+    }
+    
+    for finding in findings:
+        # Count by severity
+        severity = finding.get('severity', {}).get('score', 0)
+        if severity >= 7:
+            summary['severity_counts']['high'] += 1
+        elif severity >= 4:
+            summary['severity_counts']['medium'] += 1
+        else:
+            summary['severity_counts']['low'] += 1
+            
+        # Count by finding type
+        finding_type = finding.get('type', 'unknown')
+        if finding_type in summary['type_counts']:
+            summary['type_counts'][finding_type] += 1
+        else:
+            summary['type_counts'][finding_type] = 1
+            
+        # Count by S3 bucket
+        resource = finding.get('resourcesAffected', {}).get('s3Bucket', {})
+        bucket_name = resource.get('name', 'unknown')
+        if bucket_name in summary['bucket_counts']:
+            summary['bucket_counts'][bucket_name] += 1
+        else:
+            summary['bucket_counts'][bucket_name] = 1
+    
+    return summary
