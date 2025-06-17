@@ -18,23 +18,21 @@ import argparse
 import os
 import sys
 import json
+import boto3
 import datetime
 import asyncio
 from loguru import logger
 from mcp.server.fastmcp import Context, FastMCP
 from typing import Dict, List, Optional, Any, Literal
 from pydantic import Field
-import boto3
-
-from awslabs.aws_wa_sec_review_mcp_server.consts import INSTRUCTIONS, SERVICE_DESCRIPTIONS
-from awslabs.aws_wa_sec_review_mcp_server.util.security_services import (
+from consts import INSTRUCTIONS
+from util.security_services import (
     check_access_analyzer,
     check_security_hub,
     check_guard_duty,
     check_inspector,
     check_trusted_advisor,
     check_macie,
-    get_analyzer_findings_count,
     get_guardduty_findings,
     get_securityhub_findings,
     get_inspector_findings,
@@ -42,15 +40,16 @@ from awslabs.aws_wa_sec_review_mcp_server.util.security_services import (
     get_trusted_advisor_findings,
     get_macie_findings,
 )
-from awslabs.aws_wa_sec_review_mcp_server.util.storage_security import check_storage_encryption
-from awslabs.aws_wa_sec_review_mcp_server.util.network_security import check_network_security
+from util.storage_security import check_storage_encryption
+from util.network_security import check_network_security
 # These are commented out until we restore resource_utils.py functionality
-# from awslabs.aws_wa_sec_review_mcp_server.util.resource_utils import (
-#     list_resources_by_service,
-#     list_all_resources,
-#     resource_inventory_summary,
-#     get_tagged_resources,
-# )
+from util.resource_utils import (
+    list_resources_by_service,
+    list_all_resources,
+    resource_inventory_summary,
+    get_tagged_resources,
+    list_aws_regions,
+)
 
 # Set up AWS region and profile from environment variables
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
@@ -58,7 +57,7 @@ AWS_PROFILE = os.environ.get('AWS_PROFILE', 'default')
 
 # Remove default logger and add custom configuration
 logger.remove()
-logger.add(sys.stderr, level=os.getenv("FASTMCP_LOG_LEVEL", "WARNING"))
+logger.add(sys.stderr, level=os.getenv("FASTMCP_LOG_LEVEL", "DEBUG"))
 
 # Initialize MCP Server
 mcp = FastMCP(
@@ -66,6 +65,8 @@ mcp = FastMCP(
     instructions=INSTRUCTIONS,
     dependencies=[
         'boto3', 
+        'requests', 
+        'beautifulsoup4',        
         'pydantic',
         'loguru',
     ],
@@ -604,6 +605,119 @@ async def check_storage_encryption_tool(
             'services_checked': services,
             'error': str(e),
             'message': 'Error checking storage encryption status.'
+        }
+
+@mcp.tool(name='ListResourceTypes')
+async def list_resource_types(
+    ctx: Context,
+    region: str = Field(
+        AWS_REGION, 
+        description="AWS region to search for resource types in"
+    ),
+    service_filter: Optional[str] = Field(
+        None,
+        description="Optional filter to limit results to a specific service (e.g., 's3', 'ec2')"
+    ),
+    aws_profile: Optional[str] = Field(
+        AWS_PROFILE,
+        description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable or 'default')"
+    ),
+    store_in_context: bool = Field(
+        True,
+        description="Whether to store results in context for access by other tools"
+    )
+) -> Dict:
+    """Search for AWS resource types that can be used with other security tools.
+    
+    This tool searches for available AWS resource types in the specified region and returns
+    a list of major service names that can be passed to other tools like CheckStorageEncryption
+    or CheckNetworkSecurity.
+    
+    ## Response format
+    Returns a dictionary with:
+    - region: The region that was searched
+    - resource_types: List of major service names (e.g., ['s3', 'ebs', 'rds'])
+    - storage_services: List of storage services that can be used with CheckStorageEncryption
+    - network_services: List of network services that can be used with CheckNetworkSecurity
+    - all_services: Complete list of all available services
+    
+    ## AWS permissions required
+    - ec2:DescribeRegions
+    - resource-explorer-2:ListResources (if available)
+    - Read permissions for various AWS services
+    """
+    try:
+        print(f"Starting resource type search for region: {region}")
+        print(f"Using AWS profile: {aws_profile or 'default'}")
+        
+        # Use the provided AWS profile or default to 'default'
+        profile_name = aws_profile or 'default'
+        
+        # Create a session using the specified profile
+        session = boto3.Session(profile_name=profile_name)
+        
+        # Define service categories
+        storage_services = ['s3', 'ebs', 'rds', 'dynamodb', 'efs', 'elasticache']
+        network_services = ['elb', 'vpc', 'apigateway', 'cloudfront']
+        compute_services = ['ec2', 'lambda', 'ecs', 'eks']
+        database_services = ['rds', 'dynamodb', 'elasticache', 'neptune', 'documentdb']
+        security_services = ['iam', 'kms', 'secretsmanager', 'acm']
+        
+        # Combine all services
+        all_services = list(set(
+            storage_services + 
+            network_services + 
+            compute_services + 
+            database_services + 
+            security_services
+        ))
+        
+        # Filter services if a service filter is provided
+        filtered_services = all_services
+        if service_filter:
+            filtered_services = [s for s in all_services if service_filter.lower() in s]
+            print(f"Filtered services to: {', '.join(filtered_services)}")
+        
+        # Try to detect available services in the region
+        available_services = []
+        for service in filtered_services:
+            try:
+                # Try to create a client for the service
+                client = session.client(service, region_name=region)
+                # If no exception, add to available services
+                available_services.append(service)
+            except Exception as e:
+                print(f"Service {service} not available in region {region}: {e}")
+        
+        print(f"Found {len(available_services)} available services in region {region}")
+        
+        # Prepare result
+        result = {
+            'region': region,
+            'resource_types': available_services,
+            'storage_services': [s for s in available_services if s in storage_services],
+            'network_services': [s for s in available_services if s in network_services],
+            'compute_services': [s for s in available_services if s in compute_services],
+            'database_services': [s for s in available_services if s in database_services],
+            'security_services': [s for s in available_services if s in security_services],
+            'all_services': all_services
+        }
+        
+        # Store results in context if requested
+        if store_in_context:
+            context_key = f"resource_types_{region}"
+            context_storage[context_key] = result
+            print(f"Stored resource types in context with key: {context_key}")
+        
+        return result
+    
+    except Exception as e:
+        # Log error
+        print(f"ERROR: Error listing resource types: {e}")
+        return {
+            'region': region,
+            'error': str(e),
+            'message': 'Error listing resource types.'
         }
 
 @mcp.tool(name='CheckNetworkSecurity')
