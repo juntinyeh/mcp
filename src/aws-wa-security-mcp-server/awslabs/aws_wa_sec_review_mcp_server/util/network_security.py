@@ -17,7 +17,8 @@
 import boto3
 import json
 import datetime
-from typing import Dict, List, Any, Optional, Union, Set
+import botocore.exceptions
+from typing import Dict, List, Any, Optional, Union, Set, Type
 from loguru import logger
 from mcp.server.fastmcp import Context
 
@@ -261,12 +262,12 @@ async def find_network_resources(region: str, session: boto3.Session, services: 
             "resources": resources
         }
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error finding network resources: {e}")
         await ctx.error(f"Error finding network resources: {e}")
         return {"error": str(e), "resources_by_service": {}}
 
-async def check_classic_load_balancers(region: str, elb_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_classic_load_balancers(region: str, elb_client: Any, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check Classic Load Balancers for data-in-transit security best practices."""
     print(f"[DEBUG:NetworkSecurity] Checking Classic Load Balancers in {region}")
     
@@ -386,7 +387,7 @@ async def check_classic_load_balancers(region: str, elb_client: boto3.client, ct
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error checking Classic Load Balancers: {e}")
         await ctx.error(f"Error checking Classic Load Balancers: {e}")
         return {
@@ -398,7 +399,7 @@ async def check_classic_load_balancers(region: str, elb_client: boto3.client, ct
             'resource_details': []
         }
 
-async def check_elbv2_load_balancers(region: str, elbv2_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_elbv2_load_balancers(region: str, elbv2_client: Any, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check Application and Network Load Balancers for data-in-transit security best practices."""
     print(f"[DEBUG:NetworkSecurity] Checking ALB/NLB Load Balancers in {region}")
     
@@ -538,7 +539,7 @@ async def check_elbv2_load_balancers(region: str, elbv2_client: boto3.client, ct
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error checking ALB/NLB Load Balancers: {e}")
         await ctx.error(f"Error checking ALB/NLB Load Balancers: {e}")
         return {
@@ -550,7 +551,7 @@ async def check_elbv2_load_balancers(region: str, elbv2_client: boto3.client, ct
             'resource_details': []
         }
 
-async def check_vpc_endpoints(region: str, ec2_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_vpc_endpoints(region: str, ec2_client: Any, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check VPC endpoints for data-in-transit security best practices."""
     print(f"[DEBUG:NetworkSecurity] Checking VPC endpoints in {region}")
     
@@ -641,7 +642,7 @@ async def check_vpc_endpoints(region: str, ec2_client: boto3.client, ctx: Contex
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error checking VPC endpoints: {e}")
         await ctx.error(f"Error checking VPC endpoints: {e}")
         return {
@@ -653,7 +654,7 @@ async def check_vpc_endpoints(region: str, ec2_client: boto3.client, ctx: Contex
             'resource_details': []
         }
 
-async def check_security_groups(region: str, ec2_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_security_groups(region: str, ec2_client: Any, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check security groups for data-in-transit security best practices."""
     print(f"[DEBUG:NetworkSecurity] Checking security groups in {region}")
     
@@ -765,7 +766,7 @@ async def check_security_groups(region: str, ec2_client: boto3.client, ctx: Cont
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error checking security groups: {e}")
         await ctx.error(f"Error checking security groups: {e}")
         return {
@@ -777,7 +778,7 @@ async def check_security_groups(region: str, ec2_client: boto3.client, ctx: Cont
             'resource_details': []
         }
 
-async def check_api_gateway(region: str, apigw_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_api_gateway(region: str, apigw_client: Any, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check API Gateway for data-in-transit security best practices."""
     print(f"[DEBUG:NetworkSecurity] Checking API Gateway in {region}")
     
@@ -906,7 +907,7 @@ async def check_api_gateway(region: str, apigw_client: boto3.client, ctx: Contex
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error checking API Gateway: {e}")
         await ctx.error(f"Error checking API Gateway: {e}")
         return {
@@ -918,7 +919,7 @@ async def check_api_gateway(region: str, apigw_client: boto3.client, ctx: Contex
             'resource_details': []
         }
 
-async def check_cloudfront_distributions(region: str, cf_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_cloudfront_distributions(region: str, cf_client: Any, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check CloudFront distributions for data-in-transit security best practices."""
     print(f"[DEBUG:NetworkSecurity] Checking CloudFront distributions")
     
@@ -1030,7 +1031,7 @@ async def check_cloudfront_distributions(region: str, cf_client: boto3.client, c
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:NetworkSecurity] Error checking CloudFront distributions: {e}")
         await ctx.error(f"Error checking CloudFront distributions: {e}")
         return {

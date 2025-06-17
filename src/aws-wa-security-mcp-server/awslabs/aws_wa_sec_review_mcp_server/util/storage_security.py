@@ -17,7 +17,8 @@
 import boto3
 import json
 import datetime
-from typing import Dict, List, Any, Optional, Union
+import botocore.exceptions
+from typing import Dict, List, Any, Optional, Union, Type
 from loguru import logger
 from mcp.server.fastmcp import Context
 
@@ -189,12 +190,12 @@ async def find_storage_resources(region: str, session: boto3.Session, services: 
             "resources": resources
         }
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:StorageSecurity] Error finding storage resources: {e}")
         await ctx.error(f"Error finding storage resources: {e}")
         return {"error": str(e), "resources_by_service": {}}
 
-async def check_s3_buckets(region: str, s3_client: boto3.client, ctx: Context, storage_resources: Dict[str, Any]) -> Dict[str, Any]:
+async def check_s3_buckets(region: str, s3_client: Any, ctx: Context, storage_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check S3 buckets for encryption and security best practices."""
     print(f"[DEBUG:StorageSecurity] Checking S3 buckets in {region}")
     
@@ -331,7 +332,7 @@ async def check_s3_buckets(region: str, s3_client: boto3.client, ctx: Context, s
         
         return results
     
-    except Exception as e:
+    except botocore.exceptions.BotoCoreError as e:
         print(f"[DEBUG:StorageSecurity] Error checking S3 buckets: {e}")
         await ctx.error(f"Error checking S3 buckets: {e}")
         return {
