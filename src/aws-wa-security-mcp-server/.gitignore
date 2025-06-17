@@ -33,4 +33,3 @@ htmlcov/
 # Developer log and scripts
 DEVELOPER_LOG.md
 add_core_dev.py
-uv.lock
