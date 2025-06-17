@@ -23,12 +23,8 @@ from .security_services import (
 )
 
 from .resource_utils import (
-    list_resources_by_service,
-    list_all_resources,
-    resource_inventory_summary,
-    get_tagged_resources,
-    get_resource_compliance_status,
-    list_aws_regions,
+    list_services_in_region,
+    list_services_alternative
 )
 
 # Export all imported functions
@@ -44,10 +40,6 @@ __all__ = [
     'get_access_analyzer_findings',
     
     # Resource utility functions
-    'list_resources_by_service',
-    'list_all_resources',
-    'resource_inventory_summary',
-    'get_tagged_resources',
-    'get_resource_compliance_status',
-    'list_aws_regions',
+    'list_services_in_region',
+    'list_services_alternative'
 ]

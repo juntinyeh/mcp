@@ -42,13 +42,9 @@ from util.security_services import (
 )
 from util.storage_security import check_storage_encryption
 from util.network_security import check_network_security
-# These are commented out until we restore resource_utils.py functionality
 from util.resource_utils import (
-    list_resources_by_service,
-    list_all_resources,
-    resource_inventory_summary,
-    get_tagged_resources,
-    list_aws_regions,
+    list_services_in_region,
+    list_services_alternative
 )
 
 # Set up AWS region and profile from environment variables
@@ -719,6 +715,82 @@ async def list_resource_types(
             'error': str(e),
             'message': 'Error listing resource types.'
         }
+
+@mcp.tool(name='ListServicesInRegion')
+async def list_services_in_region_tool(
+    ctx: Context,
+    region: str = Field(
+        AWS_REGION, 
+        description="AWS region to list services for"
+    ),
+    aws_profile: Optional[str] = Field(
+        AWS_PROFILE,
+        description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable or 'default')"
+    ),
+    store_in_context: bool = Field(
+        True,
+        description="Whether to store results in context for access by other tools"
+    )
+) -> Dict:
+    """List all AWS services being used in a specific region.
+    
+    This tool identifies which AWS services are actively being used in the specified region
+    by discovering resources through AWS Resource Explorer or direct API calls.
+    
+    ## Response format
+    Returns a dictionary with:
+    - region: The region that was checked
+    - services: List of AWS services being used in the region
+    - service_counts: Dictionary mapping service names to resource counts
+    - total_resources: Total number of resources found across all services
+    
+    ## AWS permissions required
+    - resource-explorer-2:Search (if Resource Explorer is set up)
+    - Read permissions for various AWS services
+    """
+    print(f"Starting service discovery for region: {region}")
+    print(f"Using AWS profile: {aws_profile or 'default'}")
+    
+    # Use the provided AWS profile or default to 'default'
+    profile_name = aws_profile or 'default'
+    
+    # Create a session using the specified profile
+    session = boto3.Session(profile_name=profile_name)
+    
+    try:
+        # First try using Resource Explorer method
+        print(f"Attempting to discover services using Resource Explorer in {region}...")
+        results = await list_services_in_region(region, session, ctx)
+        
+    except Exception as e:
+        # If Resource Explorer method fails, log the error and try alternative method
+        print(f"Resource Explorer method failed: {e}")
+        print(f"Falling back to alternative service discovery method...")
+        
+        try:
+            # Try the alternative method directly
+            results = await list_services_alternative(region, session, ctx)
+            
+        except Exception as alt_e:
+            # If alternative method also fails, return error
+            print(f"ERROR: Alternative method also failed: {alt_e}")
+            return {
+                'region': region,
+                'error': f"Both discovery methods failed. Primary error: {str(e)}. Alternative error: {str(alt_e)}",
+                'message': f'Error listing services in region {region}.',
+                'services': [],
+                'service_counts': {},
+                'total_resources': 0
+            }
+    
+    # Store results in context if requested
+    if store_in_context:
+        context_key = f"services_in_region_{region}"
+        context_storage[context_key] = results
+        print(f"Stored services list in context with key: {context_key}")
+    
+    return results
+
 
 @mcp.tool(name='CheckNetworkSecurity')
 async def check_network_security_tool(
