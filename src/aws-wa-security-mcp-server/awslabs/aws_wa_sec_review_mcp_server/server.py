@@ -202,16 +202,20 @@ async def check_security_services(
                 print(f"[DEBUG:CheckSecurityServices] check_access_analyzer returned: enabled={service_result.get('enabled', False)}")
                 
                 # If service_result says not enabled but analyzers are present, override the enabled flag
-                if not service_result.get('enabled', False) and service_result.get('analyzers') and len(service_result.get('analyzers')) > 0:
+                analyzers = service_result.get('analyzers', [])
+                if not service_result.get('enabled', False) and analyzers and len(analyzers) > 0:
                     print(f"[DEBUG:CheckSecurityServices] OVERRIDING: Access Analyzer has analyzers but reported as disabled. Setting enabled=True")
                     service_result['enabled'] = True
-                    service_result['message'] = f"IAM Access Analyzer is enabled with {len(service_result['analyzers'])} analyzer(s)."
+                    service_result['message'] = f"IAM Access Analyzer is enabled with {len(analyzers)} analyzer(s)."
                     
                 # Always log the analyzers we found
                 analyzers = service_result.get('analyzers', [])
-                print(f"[DEBUG:CheckSecurityServices] Access Analyzer check found {len(analyzers)} analyzers:")
-                for idx, analyzer in enumerate(analyzers):
-                    print(f"[DEBUG:CheckSecurityServices]   Analyzer {idx+1}: name={analyzer.get('name')}, status={analyzer.get('status')}")
+                if analyzers:
+                    print(f"[DEBUG:CheckSecurityServices] Access Analyzer check found {len(analyzers)} analyzers:")
+                    for idx, analyzer in enumerate(analyzers):
+                        print(f"[DEBUG:CheckSecurityServices]   Analyzer {idx+1}: name={analyzer.get('name')}, status={analyzer.get('status')}")
+                else:
+                    print("[DEBUG:CheckSecurityServices] Access Analyzer check found no analyzers")
                     
             elif service_name.lower() == 'securityhub':
                 service_result = await check_security_hub(region, session, ctx)
@@ -410,6 +414,14 @@ async def get_security_findings(
             elif service_name == 'trustedadvisor':
                 # For Trusted Advisor, severity maps to status (error, warning, ok)
                 status_filter = [severity_filter.lower()]
+        
+        # Initialize result with default values
+        result = {
+            'service': service_name,
+            'enabled': False,
+            'message': f'Error retrieving {service_name} findings',
+            'findings': []
+        }
         
         # Call appropriate service function based on service parameter
         if service_name == 'guardduty':
@@ -756,6 +768,14 @@ async def list_services_in_region_tool(
     
     # Create a session using the specified profile
     session = boto3.Session(profile_name=profile_name)
+    
+    # Initialize results with default values
+    results = {
+        'region': region,
+        'services': [],
+        'service_counts': {},
+        'total_resources': 0
+    }
     
     try:
         # First try using Resource Explorer method

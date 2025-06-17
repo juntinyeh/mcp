@@ -192,7 +192,7 @@ async def find_storage_resources(region: str, session: boto3.Session, services: 
     except Exception as e:
         print(f"[DEBUG:StorageSecurity] Error finding storage resources: {e}")
         await ctx.error(f"Error finding storage resources: {e}")
-        return {"error": str(e)}
+        return {"error": str(e), "resources_by_service": {}}
 
 async def check_s3_buckets(region: str, s3_client: boto3.client, ctx: Context, storage_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check S3 buckets for encryption and security best practices."""

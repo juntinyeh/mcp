@@ -264,7 +264,7 @@ async def find_network_resources(region: str, session: boto3.Session, services: 
     except Exception as e:
         print(f"[DEBUG:NetworkSecurity] Error finding network resources: {e}")
         await ctx.error(f"Error finding network resources: {e}")
-        return {"error": str(e)}
+        return {"error": str(e), "resources_by_service": {}}
 
 async def check_classic_load_balancers(region: str, elb_client: boto3.client, ctx: Context, network_resources: Dict[str, Any]) -> Dict[str, Any]:
     """Check Classic Load Balancers for data-in-transit security best practices."""

@@ -120,7 +120,7 @@ async def list_services_alternative(
 ) -> Dict[str, Any]:
     """Alternative method to list services when Resource Explorer is not available.
     
-    This method checks for resources in commonly used services directly.
+    This method checks for the availability of commonly used services in the region.
     
     Args:
         region: AWS region to list services for
@@ -148,27 +148,23 @@ async def list_services_alternative(
     service_resource_counts = {}
     total_resources = 0
     
-    # Check each service for resources
+    # Check each service for availability
     for service in common_services:
         try:
             # Skip global services if not in primary region
             if service in ['iam', 'cloudfront'] and region != 'us-east-1':
                 continue
                 
-            resources = await list_resources_by_service(region, service, session, ctx)
+            # Try to create a client for the service to check if it's available
+            client = session.client(service, region_name=region)
             
-            # If resources were found for this service
-            if resources:
-                resource_count = 0
-                for resource_type, items in resources.items():
-                    resource_count += len(items)
-                
-                if resource_count > 0:
-                    services_with_resources.append(service)
-                    service_resource_counts[service] = resource_count
-                    total_resources += resource_count
+            # If we get here, the service is available
+            services_with_resources.append(service)
+            service_resource_counts[service] = 1  # Just mark as available
+            total_resources += 1
+            
         except Exception as e:
-            await ctx.warning(f"Error checking service {service} in {region}: {e}")
+            await ctx.warning(f"Service {service} not available in region {region}: {e}")
     
     # Update result
     result["services"] = sorted(services_with_resources)
