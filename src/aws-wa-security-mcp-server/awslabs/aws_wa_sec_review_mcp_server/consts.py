@@ -15,7 +15,7 @@
 """Constants for the AWS Security Pillar MCP Server."""
 
 # Default AWS regions to use if none are specified
-DEFAULT_REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1']
+DEFAULT_REGIONS = ["us-east-1", "us-west-2", "eu-west-1"]
 
 # Instructions for the MCP server
 INSTRUCTIONS = """AWS Security Pillar MCP Server for analyzing AWS environments against Well-Architected Framework security principles.
@@ -95,19 +95,19 @@ For more information, see: https://docs.aws.amazon.com/wellarchitected/latest/se
 
 # Security domains from Well-Architected Framework
 SECURITY_DOMAINS = [
-    'identity_and_access_management',
-    'detection',
-    'infrastructure_protection',
-    'data_protection',
-    'incident_response',
-    'application_security',
+    "identity_and_access_management",
+    "detection",
+    "infrastructure_protection",
+    "data_protection",
+    "incident_response",
+    "application_security",
 ]
 
 # Severity levels for security findings
 SEVERITY_LEVELS = {
-    'CRITICAL': 4,
-    'HIGH': 3,
-    'MEDIUM': 2,
-    'LOW': 1,
-    'INFORMATIONAL': 0,
+    "CRITICAL": 4,
+    "HIGH": 3,
+    "MEDIUM": 2,
+    "LOW": 1,
+    "INFORMATIONAL": 0,
 }

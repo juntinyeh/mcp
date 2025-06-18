@@ -29,14 +29,14 @@ from .security_services import (
 # Export all imported functions
 __all__ = [
     # Security service functions
-    'check_access_analyzer',
-    'check_security_hub',
-    'check_guard_duty',
-    'check_inspector',
-    'get_guardduty_findings',
-    'get_securityhub_findings',
-    'get_inspector_findings',
-    'get_access_analyzer_findings',
+    "check_access_analyzer",
+    "check_security_hub",
+    "check_guard_duty",
+    "check_inspector",
+    "get_guardduty_findings",
+    "get_securityhub_findings",
+    "get_inspector_findings",
+    "get_access_analyzer_findings",
     # Resource utility functions
-    'list_services_in_region',
+    "list_services_in_region",
 ]

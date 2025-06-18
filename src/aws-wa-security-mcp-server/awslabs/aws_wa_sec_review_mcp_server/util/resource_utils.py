@@ -35,31 +35,31 @@ async def list_services_in_region(
     """
     try:
         # Initialize the result dictionary
-        result = {'region': region, 'services': [], 'service_counts': {}, 'total_resources': 0}
+        result = {"region": region, "services": [], "service_counts": {}, "total_resources": 0}
 
         # Use Resource Explorer to efficiently discover resources
         try:
-            resource_explorer = session.client('resource-explorer-2', region_name=region)
+            resource_explorer = session.client("resource-explorer-2", region_name=region)
 
             # Check if Resource Explorer is available in this region
             try:
                 # Try to search with Resource Explorer
                 resource_explorer.search(
-                    QueryString='*',
+                    QueryString="*",
                     MaxResults=1,  # Just checking if it works
                 )
             except Exception as e:
-                if 'Resource Explorer has not been set up' in str(e):
+                if "Resource Explorer has not been set up" in str(e):
                     await ctx.warning(
-                        f'Resource Explorer not set up in {region}. Using alternative method.'
+                        f"Resource Explorer not set up in {region}. Using alternative method."
                     )
-                    return {'region': region, 'services': [], 'error': str(e)}
+                    return {"region": region, "services": [], "error": str(e)}
                 else:
                     raise e
 
             # Resource Explorer is available, use it to get all resources
-            paginator = resource_explorer.get_paginator('search')
-            page_iterator = paginator.paginate(QueryString='*', MaxResults=1000)
+            paginator = resource_explorer.get_paginator("search")
+            page_iterator = paginator.paginate(QueryString="*", MaxResults=1000)
 
             # Track unique services
             services_set = set()
@@ -67,11 +67,11 @@ async def list_services_in_region(
 
             # Process each page of results
             for page in page_iterator:
-                for resource in page.get('Resources', []):
+                for resource in page.get("Resources", []):
                     # Extract service from ARN
-                    arn = resource.get('Arn', '')
+                    arn = resource.get("Arn", "")
                     if arn:
-                        arn_parts = arn.split(':')
+                        arn_parts = arn.split(":")
                         if len(arn_parts) >= 3:
                             service = arn_parts[2]
                             services_set.add(service)
@@ -83,17 +83,17 @@ async def list_services_in_region(
                                 service_resource_counts[service] = 1
 
             # Update result with discovered services
-            result['services'] = sorted(list(services_set))
-            result['service_counts'] = service_resource_counts
-            result['total_resources'] = sum(service_resource_counts.values())
+            result["services"] = sorted(list(services_set))
+            result["service_counts"] = service_resource_counts
+            result["total_resources"] = sum(service_resource_counts.values())
 
         except Exception as e:
-            await ctx.warning(f'Error using Resource Explorer in {region}: {e}')
+            await ctx.warning(f"Error using Resource Explorer in {region}: {e}")
             # Fall back to alternative method
-            return {'region': region, 'services': [], 'error': str(e)}
+            return {"region": region, "services": [], "error": str(e)}
 
         return result
 
     except Exception as e:
-        await ctx.error(f'Error listing services in region {region}: {e}')
-        return {'region': region, 'services': [], 'error': str(e)}
+        await ctx.error(f"Error listing services in region {region}: {e}")
+        return {"region": region, "services": [], "error": str(e)}

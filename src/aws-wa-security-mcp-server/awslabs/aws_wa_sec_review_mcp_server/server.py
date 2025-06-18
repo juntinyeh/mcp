@@ -45,23 +45,23 @@ from util.security_services import (
 from util.storage_security import check_storage_encryption
 
 # Set up AWS region and profile from environment variables
-AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
-AWS_PROFILE = os.environ.get('AWS_PROFILE', 'default')
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+AWS_PROFILE = os.environ.get("AWS_PROFILE", "default")
 
 # Remove default logger and add custom configuration
 logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'DEBUG'))
+logger.add(sys.stderr, level=os.getenv("FASTMCP_LOG_LEVEL", "DEBUG"))
 
 # Initialize MCP Server
 mcp = FastMCP(
-    'aws-wa-sec-review-mcp-server',
+    "aws-wa-sec-review-mcp-server",
     instructions=INSTRUCTIONS,
     dependencies=[
-        'boto3',
-        'requests',
-        'beautifulsoup4',
-        'pydantic',
-        'loguru',
+        "boto3",
+        "requests",
+        "beautifulsoup4",
+        "pydantic",
+        "loguru",
     ],
 )
 
@@ -71,52 +71,52 @@ rule_catalog = None
 
 # Define Field singleton variables for parameter defaults
 FIELD_AWS_REGION = Field(
-    AWS_REGION, description='AWS region to check for security services status'
+    AWS_REGION, description="AWS region to check for security services status"
 )
 FIELD_AWS_PROFILE = Field(
     AWS_PROFILE,
     description="Optional AWS profile to use (defaults to AWS_PROFILE environment variable or 'default')",
 )
 FIELD_STORE_IN_CONTEXT_TRUE = Field(
-    True, description='Whether to store results in context for access by other tools'
+    True, description="Whether to store results in context for access by other tools"
 )
 FIELD_DEBUG_TRUE = Field(
-    True, description='Whether to include detailed debug information in the response'
+    True, description="Whether to include detailed debug information in the response"
 )
 FIELD_SECURITY_SERVICES = Field(
-    ['guardduty', 'inspector', 'accessanalyzer', 'securityhub', 'trustedadvisor', 'macie'],
-    description='List of security services to check. Options: guardduty, inspector, accessanalyzer, securityhub, trustedadvisor, macie',
+    ["guardduty", "inspector", "accessanalyzer", "securityhub", "trustedadvisor", "macie"],
+    description="List of security services to check. Options: guardduty, inspector, accessanalyzer, securityhub, trustedadvisor, macie",
 )
 FIELD_ACCOUNT_ID = Field(
     None, description="Optional AWS account ID (defaults to caller's account)"
 )
-FIELD_MAX_FINDINGS = Field(100, description='Maximum number of findings to retrieve')
+FIELD_MAX_FINDINGS = Field(100, description="Maximum number of findings to retrieve")
 FIELD_SEVERITY_FILTER = Field(
     None,
     description="Optional severity filter (e.g., 'HIGH', 'CRITICAL', or for Trusted Advisor: 'ERROR', 'WARNING')",
 )
 FIELD_CHECK_ENABLED = Field(
-    True, description='Whether to check if service is enabled before retrieving findings'
+    True, description="Whether to check if service is enabled before retrieving findings"
 )
 FIELD_DETAILED_FALSE = Field(
-    False, description='Whether to return the full details of the stored security services data'
+    False, description="Whether to return the full details of the stored security services data"
 )
 FIELD_STORAGE_SERVICES = Field(
-    ['s3', 'ebs', 'rds', 'dynamodb', 'efs', 'elasticache'],
-    description='List of storage services to check. Options: s3, ebs, rds, dynamodb, efs, elasticache',
+    ["s3", "ebs", "rds", "dynamodb", "efs", "elasticache"],
+    description="List of storage services to check. Options: s3, ebs, rds, dynamodb, efs, elasticache",
 )
 FIELD_INCLUDE_UNENCRYPTED_ONLY = Field(
-    False, description='Whether to include only unencrypted resources in the results'
+    False, description="Whether to include only unencrypted resources in the results"
 )
 FIELD_SERVICE_FILTER = Field(
     None, description="Optional filter to limit results to a specific service (e.g., 's3', 'ec2')"
 )
 FIELD_NETWORK_SERVICES = Field(
-    ['elb', 'vpc', 'apigateway', 'cloudfront'],
-    description='List of network services to check. Options: elb, vpc, apigateway, cloudfront',
+    ["elb", "vpc", "apigateway", "cloudfront"],
+    description="List of network services to check. Options: elb, vpc, apigateway, cloudfront",
 )
 FIELD_INCLUDE_NON_COMPLIANT_ONLY = Field(
-    False, description='Whether to include only non-compliant resources in the results'
+    False, description="Whether to include only non-compliant resources in the results"
 )
 
 # Global context storage for sharing data between tool calls
@@ -144,13 +144,13 @@ async def initialize():
         # rule_catalog = RuleCatalog()
         # await rule_catalog.initialize()
 
-        logger.info('AWS Security Pillar MCP Server initialized successfully')
+        logger.info("AWS Security Pillar MCP Server initialized successfully")
     except Exception as e:
-        logger.error(f'Error initializing AWS Security Pillar MCP Server: {e}')
+        logger.error(f"Error initializing AWS Security Pillar MCP Server: {e}")
         # Continue without initialization - components will be loaded on demand
 
 
-@mcp.tool(name='CheckSecurityServices')
+@mcp.tool(name="CheckSecurityServices")
 async def check_security_services(
     ctx: Context,
     region: str = FIELD_AWS_REGION,
@@ -186,52 +186,52 @@ async def check_security_services(
 
         if debug:
             print(
-                f'[DEBUG:CheckSecurityServices] Starting security services check for region: {region}'
+                f"[DEBUG:CheckSecurityServices] Starting security services check for region: {region}"
             )
             print(f'[DEBUG:CheckSecurityServices] Services to check: {", ".join(services)}')
             print(f'[DEBUG:CheckSecurityServices] Using AWS profile: {aws_profile or "default"}')
 
         # Use the provided AWS profile or default to 'default'
-        profile_name = aws_profile or 'default'
+        profile_name = aws_profile or "default"
 
         # Create a session using the specified profile
         session = boto3.Session(profile_name=profile_name)
 
         # Initialize results
         results = {
-            'region': region,
-            'services_checked': services,
-            'all_enabled': True,
-            'service_statuses': {},
+            "region": region,
+            "services_checked": services,
+            "all_enabled": True,
+            "service_statuses": {},
         }
 
         if debug:
             # Add debug info to the results
-            results['debug_info'] = {
-                'start_time': start_time.isoformat(),
-                'aws_profile': profile_name,
-                'service_details': {},
+            results["debug_info"] = {
+                "start_time": start_time.isoformat(),
+                "aws_profile": profile_name,
+                "service_details": {},
             }
 
         # Check each requested service
         for service_name in services:
             # Process status update
             service_start_time = datetime.datetime.now()
-            print(f'Checking {service_name} status in {region}...')
+            print(f"Checking {service_name} status in {region}...")
             if debug:
-                print(f'[DEBUG:CheckSecurityServices] Starting check for {service_name}')
+                print(f"[DEBUG:CheckSecurityServices] Starting check for {service_name}")
 
             service_result = None
 
             # Call the appropriate check function based on service name
-            if service_name.lower() == 'guardduty':
+            if service_name.lower() == "guardduty":
                 service_result = await check_guard_duty(region, session, ctx)
-            elif service_name.lower() == 'inspector':
+            elif service_name.lower() == "inspector":
                 service_result = await check_inspector(region, session, ctx)
-            elif service_name.lower() == 'accessanalyzer':
+            elif service_name.lower() == "accessanalyzer":
                 # Call the access analyzer check with additional debugging
                 print(
-                    f'[DEBUG:CheckSecurityServices] Calling check_access_analyzer for region {region}'
+                    f"[DEBUG:CheckSecurityServices] Calling check_access_analyzer for region {region}"
                 )
                 service_result = await check_access_analyzer(region, session, ctx)
                 print(
@@ -239,84 +239,84 @@ async def check_security_services(
                 )
 
                 # If service_result says not enabled but analyzers are present, override the enabled flag
-                analyzers = service_result.get('analyzers', [])
-                if not service_result.get('enabled', False) and analyzers and len(analyzers) > 0:
+                analyzers = service_result.get("analyzers", [])
+                if not service_result.get("enabled", False) and analyzers and len(analyzers) > 0:
                     print(
-                        '[DEBUG:CheckSecurityServices] OVERRIDING: Access Analyzer has analyzers but reported as disabled. Setting enabled=True'
+                        "[DEBUG:CheckSecurityServices] OVERRIDING: Access Analyzer has analyzers but reported as disabled. Setting enabled=True"
                     )
-                    service_result['enabled'] = True
-                    service_result['message'] = (
-                        f'IAM Access Analyzer is enabled with {len(analyzers)} analyzer(s).'
+                    service_result["enabled"] = True
+                    service_result["message"] = (
+                        f"IAM Access Analyzer is enabled with {len(analyzers)} analyzer(s)."
                     )
 
                 # Always log the analyzers we found
-                analyzers = service_result.get('analyzers', [])
+                analyzers = service_result.get("analyzers", [])
                 if analyzers:
                     print(
-                        f'[DEBUG:CheckSecurityServices] Access Analyzer check found {len(analyzers)} analyzers:'
+                        f"[DEBUG:CheckSecurityServices] Access Analyzer check found {len(analyzers)} analyzers:"
                     )
                     for idx, analyzer in enumerate(analyzers):
                         print(
                             f'[DEBUG:CheckSecurityServices]   Analyzer {idx + 1}: name={analyzer.get("name")}, status={analyzer.get("status")}'
                         )
                 else:
-                    print('[DEBUG:CheckSecurityServices] Access Analyzer check found no analyzers')
+                    print("[DEBUG:CheckSecurityServices] Access Analyzer check found no analyzers")
 
-            elif service_name.lower() == 'securityhub':
+            elif service_name.lower() == "securityhub":
                 service_result = await check_security_hub(region, session, ctx)
-            elif service_name.lower() == 'trustedadvisor':
-                print('[DEBUG:CheckSecurityServices] Calling check_trusted_advisor')
+            elif service_name.lower() == "trustedadvisor":
+                print("[DEBUG:CheckSecurityServices] Calling check_trusted_advisor")
                 service_result = await check_trusted_advisor(region, session, ctx)
                 print(
                     f'[DEBUG:CheckSecurityServices] check_trusted_advisor returned: enabled={service_result.get("enabled", False)}'
                 )
-            elif service_name.lower() == 'macie':
-                print('[DEBUG:CheckSecurityServices] Calling check_macie')
+            elif service_name.lower() == "macie":
+                print("[DEBUG:CheckSecurityServices] Calling check_macie")
                 service_result = await check_macie(region, session, ctx)
                 print(
                     f'[DEBUG:CheckSecurityServices] check_macie returned: enabled={service_result.get("enabled", False)}'
                 )
             else:
                 # Log warning
-                print(f'WARNING: Unknown service: {service_name}. Skipping.')
+                print(f"WARNING: Unknown service: {service_name}. Skipping.")
                 continue
 
             # Add service result to the output
-            results['service_statuses'][service_name] = service_result
+            results["service_statuses"][service_name] = service_result
 
             # Update all_enabled flag
-            if service_result and not service_result.get('enabled', False):
-                results['all_enabled'] = False
+            if service_result and not service_result.get("enabled", False):
+                results["all_enabled"] = False
 
             # Add debug info for this service if debug is enabled
             if debug:
                 service_end_time = datetime.datetime.now()
                 service_duration = (service_end_time - service_start_time).total_seconds()
 
-                if 'debug_info' in results and 'service_details' in results['debug_info']:
-                    results['debug_info']['service_details'][service_name] = {
-                        'duration_seconds': service_duration,
-                        'enabled': service_result.get('enabled', False)
+                if "debug_info" in results and "service_details" in results["debug_info"]:
+                    results["debug_info"]["service_details"][service_name] = {
+                        "duration_seconds": service_duration,
+                        "enabled": service_result.get("enabled", False)
                         if service_result
                         else False,
-                        'timestamp': service_end_time.isoformat(),
-                        'status': 'success' if service_result else 'error',
+                        "timestamp": service_end_time.isoformat(),
+                        "status": "success" if service_result else "error",
                     }
 
                 print(
-                    f'[DEBUG:CheckSecurityServices] {service_name} check completed in {service_duration:.2f} seconds'
+                    f"[DEBUG:CheckSecurityServices] {service_name} check completed in {service_duration:.2f} seconds"
                 )
 
         # Generate summary based on results
         enabled_services = [
             name
-            for name, status in results['service_statuses'].items()
-            if status.get('enabled', False)
+            for name, status in results["service_statuses"].items()
+            if status.get("enabled", False)
         ]
         disabled_services = [
             name
-            for name, status in results['service_statuses'].items()
-            if not status.get('enabled', False)
+            for name, status in results["service_statuses"].items()
+            if not status.get("enabled", False)
         ]
 
         summary = []
@@ -325,31 +325,31 @@ async def check_security_services(
 
         if disabled_services:
             summary.append(f'Disabled services: {", ".join(disabled_services)}')
-            summary.append('Consider enabling these services to improve your security posture.')
+            summary.append("Consider enabling these services to improve your security posture.")
 
-        results['summary'] = ' '.join(summary)
+        results["summary"] = " ".join(summary)
 
         # Store results in context if requested
         if store_in_context:
-            context_key = f'security_services_{region}'
+            context_key = f"security_services_{region}"
             context_storage[context_key] = results
-            print(f'Stored security services results in context with key: {context_key}')
+            print(f"Stored security services results in context with key: {context_key}")
 
         return results
 
     except Exception as e:
         # Log error
-        print(f'ERROR: Error checking security services: {e}')
+        print(f"ERROR: Error checking security services: {e}")
         return {
-            'region': region,
-            'services_checked': services,
-            'all_enabled': False,
-            'error': str(e),
-            'message': 'Error checking security services status.',
+            "region": region,
+            "services_checked": services,
+            "all_enabled": False,
+            "error": str(e),
+            "message": "Error checking security services status.",
         }
 
 
-@mcp.tool(name='GetSecurityFindings')
+@mcp.tool(name="GetSecurityFindings")
 async def get_security_findings(
     ctx: Context,
     region: str = FIELD_AWS_REGION,
@@ -391,55 +391,55 @@ async def get_security_findings(
 
         # Check if service is supported
         if service_name not in [
-            'guardduty',
-            'securityhub',
-            'inspector',
-            'accessanalyzer',
-            'trustedadvisor',
-            'macie',
+            "guardduty",
+            "securityhub",
+            "inspector",
+            "accessanalyzer",
+            "trustedadvisor",
+            "macie",
         ]:
             raise ValueError(
-                f'Unsupported security service: {service}. '
-                + 'Supported services are: guardduty, securityhub, inspector, accessanalyzer, trustedadvisor, macie'
+                f"Unsupported security service: {service}. "
+                + "Supported services are: guardduty, securityhub, inspector, accessanalyzer, trustedadvisor, macie"
             )
 
         # Get context key for security services data
-        context_key = f'security_services_{region}'
+        context_key = f"security_services_{region}"
         service_status = None
 
         # First check if we need to verify service is enabled
         if check_enabled:
             # Check if security services data is available in context
             if context_key in context_storage:
-                print(f'Using stored security services data for region: {region}')
+                print(f"Using stored security services data for region: {region}")
                 security_data = context_storage[context_key]
 
                 # Check if the requested service is in the stored data
-                service_statuses = security_data.get('service_statuses', {})
+                service_statuses = security_data.get("service_statuses", {})
                 if service_name in service_statuses:
                     service_status = service_statuses[service_name]
 
                     # Check if service is enabled
-                    if not service_status.get('enabled', False):
+                    if not service_status.get("enabled", False):
                         return {
-                            'service': service_name,
-                            'enabled': False,
-                            'message': f'{service_name} is not enabled in region {region}. Please enable it before retrieving findings.',
-                            'setup_instructions': service_status.get(
-                                'setup_instructions', 'No setup instructions available.'
+                            "service": service_name,
+                            "enabled": False,
+                            "message": f"{service_name} is not enabled in region {region}. Please enable it before retrieving findings.",
+                            "setup_instructions": service_status.get(
+                                "setup_instructions", "No setup instructions available."
                             ),
                         }
                 else:
                     print(
-                        f'Service {service_name} not found in stored security services data. Will check directly.'
+                        f"Service {service_name} not found in stored security services data. Will check directly."
                     )
             else:
                 print(
-                    f'No stored security services data found for region: {region}. Will check service status directly.'
+                    f"No stored security services data found for region: {region}. Will check service status directly."
                 )
 
         # Use the provided AWS profile or default to 'default'
-        profile_name = aws_profile or 'default'
+        profile_name = aws_profile or "default"
 
         # Create a session using the specified profile
         session = boto3.Session(profile_name=profile_name)
@@ -447,101 +447,101 @@ async def get_security_findings(
         # Prepare filter criteria based on severity
         filter_criteria = None
         if severity_filter:
-            if service_name == 'guardduty':
+            if service_name == "guardduty":
                 # GuardDuty uses numeric severity levels
                 severity_mapping = {
-                    'LOW': ['1', '2', '3'],
-                    'MEDIUM': ['4', '5', '6'],
-                    'HIGH': ['7', '8'],
-                    'CRITICAL': ['8'],
+                    "LOW": ["1", "2", "3"],
+                    "MEDIUM": ["4", "5", "6"],
+                    "HIGH": ["7", "8"],
+                    "CRITICAL": ["8"],
                 }
                 if severity_filter.upper() in severity_mapping:
                     filter_criteria = {
-                        'Criterion': {
-                            'severity': {'Eq': severity_mapping[severity_filter.upper()]}
+                        "Criterion": {
+                            "severity": {"Eq": severity_mapping[severity_filter.upper()]}
                         }
                     }
-            elif service_name == 'securityhub':
+            elif service_name == "securityhub":
                 filter_criteria = {
-                    'SeverityLabel': [{'Comparison': 'EQUALS', 'Value': severity_filter.upper()}]
+                    "SeverityLabel": [{"Comparison": "EQUALS", "Value": severity_filter.upper()}]
                 }
-            elif service_name == 'inspector':
+            elif service_name == "inspector":
                 filter_criteria = {
-                    'severities': [{'comparison': 'EQUALS', 'value': severity_filter.upper()}]
+                    "severities": [{"comparison": "EQUALS", "value": severity_filter.upper()}]
                 }
-            elif service_name == 'trustedadvisor':
+            elif service_name == "trustedadvisor":
                 # For Trusted Advisor, severity maps to status (error, warning, ok)
                 status_filter = [severity_filter.lower()]
 
         # Initialize result with default values
         result = {
-            'service': service_name,
-            'enabled': False,
-            'message': f'Error retrieving {service_name} findings',
-            'findings': [],
+            "service": service_name,
+            "enabled": False,
+            "message": f"Error retrieving {service_name} findings",
+            "findings": [],
         }
 
         # Call appropriate service function based on service parameter
-        if service_name == 'guardduty':
-            print(f'Retrieving GuardDuty findings from {region}...')
+        if service_name == "guardduty":
+            print(f"Retrieving GuardDuty findings from {region}...")
             result = await get_guardduty_findings(
                 region, session, ctx, max_findings, filter_criteria
             )
-        elif service_name == 'securityhub':
-            print(f'Retrieving Security Hub findings from {region}...')
+        elif service_name == "securityhub":
+            print(f"Retrieving Security Hub findings from {region}...")
             result = await get_securityhub_findings(
                 region, session, ctx, max_findings, filter_criteria
             )
-        elif service_name == 'inspector':
-            print(f'Retrieving Inspector findings from {region}...')
+        elif service_name == "inspector":
+            print(f"Retrieving Inspector findings from {region}...")
             result = await get_inspector_findings(
                 region, session, ctx, max_findings, filter_criteria
             )
-        elif service_name == 'accessanalyzer':
-            print(f'Retrieving IAM Access Analyzer findings from {region}...')
+        elif service_name == "accessanalyzer":
+            print(f"Retrieving IAM Access Analyzer findings from {region}...")
             result = await get_access_analyzer_findings(region, session, ctx)
-        elif service_name == 'trustedadvisor':
-            print('Retrieving Trusted Advisor security checks with Error/Warning status...')
+        elif service_name == "trustedadvisor":
+            print("Retrieving Trusted Advisor security checks with Error/Warning status...")
             # For Trusted Advisor, we'll focus on security category checks
             # Use the severity filter if provided, otherwise default to error and warning
             if severity_filter:
                 status_filter = [severity_filter.lower()]
-                print(f'Filtering Trusted Advisor checks by status: {status_filter}')
+                print(f"Filtering Trusted Advisor checks by status: {status_filter}")
             else:
-                status_filter = ['error', 'warning']
-                print(f'Using default status filter for Trusted Advisor: {status_filter}')
+                status_filter = ["error", "warning"]
+                print(f"Using default status filter for Trusted Advisor: {status_filter}")
             result = await get_trusted_advisor_findings(
                 region,
                 session,
                 ctx,
                 max_findings=max_findings,
                 status_filter=status_filter,
-                category_filter='security',
+                category_filter="security",
             )
-        elif service_name == 'macie':
-            print(f'Retrieving Macie findings from {region}...')
+        elif service_name == "macie":
+            print(f"Retrieving Macie findings from {region}...")
             result = await get_macie_findings(region, session, ctx, max_findings, filter_criteria)
 
         # Add service info to result
-        result['service'] = service_name
+        result["service"] = service_name
 
         # If the result indicates the service isn't enabled, store this information
-        if not result.get('enabled', True) and context_key in context_storage:
+        if not result.get("enabled", True) and context_key in context_storage:
             security_data = context_storage[context_key]
-            service_statuses = security_data.get('service_statuses', {})
+            service_statuses = security_data.get("service_statuses", {})
             if service_name not in service_statuses:
-                service_statuses[service_name] = {'enabled': False}
-                print(f'Updated context with status for {service_name}: not enabled')
+                service_statuses[service_name] = {"enabled": False}
+                print(f"Updated context with status for {service_name}: not enabled")
 
         return result
 
     except Exception as e:
         # Log error
-        print(f'ERROR: Error retrieving {service} findings: {e}')
+        print(f"ERROR: Error retrieving {service} findings: {e}")
         raise e
 
 
-@mcp.tool(name='GetStoredSecurityContext')
+@mcp.tool(name="GetStoredSecurityContext")
 async def get_stored_security_context(
     ctx: Context,
     region: str = FIELD_AWS_REGION,
@@ -565,36 +565,36 @@ async def get_stored_security_context(
     This tool requires that CheckSecurityServices was previously called with store_in_context=True
     for the requested region.
     """
-    context_key = f'security_services_{region}'
+    context_key = f"security_services_{region}"
 
     if context_key not in context_storage:
-        print(f'No stored security services data found for region: {region}')
+        print(f"No stored security services data found for region: {region}")
         return {
-            'region': region,
-            'available': False,
-            'message': f'No security services data has been stored for region {region}. Call CheckSecurityServices with store_in_context=True first.',
+            "region": region,
+            "available": False,
+            "message": f"No security services data has been stored for region {region}. Call CheckSecurityServices with store_in_context=True first.",
         }
 
     stored_data = context_storage[context_key]
 
     # Prepare response
     response = {
-        'region': region,
-        'available': True,
-        'summary': stored_data.get('summary', 'No summary available'),
-        'all_enabled': stored_data.get('all_enabled', False),
-        'services_checked': stored_data.get('services_checked', []),
+        "region": region,
+        "available": True,
+        "summary": stored_data.get("summary", "No summary available"),
+        "all_enabled": stored_data.get("all_enabled", False),
+        "services_checked": stored_data.get("services_checked", []),
     }
 
     # Include full data if requested
     if detailed:
-        response['data'] = stored_data
+        response["data"] = stored_data
 
-    print(f'Retrieved stored security services data for region: {region}')
+    print(f"Retrieved stored security services data for region: {region}")
     return response
 
 
-@mcp.tool(name='CheckStorageEncryption')
+@mcp.tool(name="CheckStorageEncryption")
 async def check_storage_encryption_tool(
     ctx: Context,
     region: str = FIELD_AWS_REGION,
@@ -624,12 +624,12 @@ async def check_storage_encryption_tool(
     - Read permissions for each storage service being analyzed (s3:GetEncryptionConfiguration, etc.)
     """
     try:
-        print(f'Starting storage encryption check for region: {region}')
+        print(f"Starting storage encryption check for region: {region}")
         print(f'Services to check: {", ".join(services)}')
         print(f'Using AWS profile: {aws_profile or "default"}')
 
         # Use the provided AWS profile or default to 'default'
-        profile_name = aws_profile or 'default'
+        profile_name = aws_profile or "default"
 
         # Create a session using the specified profile
         session = boto3.Session(profile_name=profile_name)
@@ -641,24 +641,24 @@ async def check_storage_encryption_tool(
 
         # Store results in context if requested
         if store_in_context:
-            context_key = f'storage_encryption_{region}'
+            context_key = f"storage_encryption_{region}"
             context_storage[context_key] = results
-            print(f'Stored storage encryption results in context with key: {context_key}')
+            print(f"Stored storage encryption results in context with key: {context_key}")
 
         return results
 
     except Exception as e:
         # Log error
-        print(f'ERROR: Error checking storage encryption: {e}')
+        print(f"ERROR: Error checking storage encryption: {e}")
         return {
-            'region': region,
-            'services_checked': services,
-            'error': str(e),
-            'message': 'Error checking storage encryption status.',
+            "region": region,
+            "services_checked": services,
+            "error": str(e),
+            "message": "Error checking storage encryption status.",
         }
 
 
-@mcp.tool(name='ListServicesInRegion')
+@mcp.tool(name="ListServicesInRegion")
 async def list_services_in_region_tool(
     ctx: Context,
     region: str = FIELD_AWS_REGION,
@@ -681,47 +681,47 @@ async def list_services_in_region_tool(
     - resource-explorer-2:Search (if Resource Explorer is set up)
     - Read permissions for various AWS services
     """
-    print(f'Starting service discovery for region: {region}')
+    print(f"Starting service discovery for region: {region}")
     print(f'Using AWS profile: {aws_profile or "default"}')
 
     # Use the provided AWS profile or default to 'default'
-    profile_name = aws_profile or 'default'
+    profile_name = aws_profile or "default"
 
     # Create a session using the specified profile
     session = boto3.Session(profile_name=profile_name)
 
     # Initialize results with default values
-    results = {'region': region, 'services': [], 'service_counts': {}, 'total_resources': 0}
+    results = {"region": region, "services": [], "service_counts": {}, "total_resources": 0}
 
     try:
         # First try using Resource Explorer method
-        print(f'Attempting to discover services using Resource Explorer in {region}...')
+        print(f"Attempting to discover services using Resource Explorer in {region}...")
         results = await list_services_in_region(region, session, ctx)
 
     except Exception as e:
         # If Resource Explorer method fails, log the error and try alternative method
-        print(f'Resource Explorer method failed: {e}')
-        print('Falling back to alternative service discovery method...')
+        print(f"Resource Explorer method failed: {e}")
+        print("Falling back to alternative service discovery method...")
 
         return {
-            'region': region,
-            'error': f'Discovery methods failed. Primary error: {str(e)}.',
-            'message': f'Error listing services in region {region}.',
-            'services': [],
-            'service_counts': {},
-            'total_resources': 0,
+            "region": region,
+            "error": f"Discovery methods failed. Primary error: {str(e)}.",
+            "message": f"Error listing services in region {region}.",
+            "services": [],
+            "service_counts": {},
+            "total_resources": 0,
         }
 
     # Store results in context if requested
     if store_in_context:
-        context_key = f'services_in_region_{region}'
+        context_key = f"services_in_region_{region}"
         context_storage[context_key] = results
-        print(f'Stored services list in context with key: {context_key}')
+        print(f"Stored services list in context with key: {context_key}")
 
     return results
 
 
-@mcp.tool(name='CheckNetworkSecurity')
+@mcp.tool(name="CheckNetworkSecurity")
 async def check_network_security_tool(
     ctx: Context,
     region: str = FIELD_AWS_REGION,
@@ -751,12 +751,12 @@ async def check_network_security_tool(
     - Read permissions for each network service being analyzed (elb:DescribeLoadBalancers, etc.)
     """
     try:
-        print(f'Starting network security check for region: {region}')
+        print(f"Starting network security check for region: {region}")
         print(f'Services to check: {", ".join(services)}')
         print(f'Using AWS profile: {aws_profile or "default"}')
 
         # Use the provided AWS profile or default to 'default'
-        profile_name = aws_profile or 'default'
+        profile_name = aws_profile or "default"
 
         # Create a session using the specified profile
         session = boto3.Session(profile_name=profile_name)
@@ -768,24 +768,24 @@ async def check_network_security_tool(
 
         # Store results in context if requested
         if store_in_context:
-            context_key = f'network_security_{region}'
+            context_key = f"network_security_{region}"
             context_storage[context_key] = results
-            print(f'Stored network security results in context with key: {context_key}')
+            print(f"Stored network security results in context with key: {context_key}")
 
         return results
 
     except Exception as e:
         # Log error
-        print(f'ERROR: Error checking network security: {e}')
+        print(f"ERROR: Error checking network security: {e}")
         return {
-            'region': region,
-            'services_checked': services,
-            'error': str(e),
-            'message': 'Error checking network security status.',
+            "region": region,
+            "services_checked": services,
+            "error": str(e),
+            "message": "Error checking network security status.",
         }
 
 
-@mcp.prompt(name='wa-sec-check-findings')
+@mcp.prompt(name="wa-sec-check-findings")
 async def security_assessment_precheck(ctx: Context) -> str:
     """Provides guidance on using CheckSecurityServices and GetSecurityFindings tools in sequence
     for a comprehensive AWS security assessment.
@@ -882,7 +882,7 @@ By following this workflow, you'll efficiently assess your AWS security posture 
 """
 
 
-@mcp.prompt(name='wa-sec-check-storage')
+@mcp.prompt(name="wa-sec-check-storage")
 async def check_storage_security_prompt(ctx: Context) -> str:
     """Provides guidance on checking AWS storage resources for proper encryption and security configuration.
 
@@ -1029,7 +1029,7 @@ By following this workflow, you'll efficiently assess your AWS storage security 
 """
 
 
-@mcp.prompt(name='wa-sec-check-network')
+@mcp.prompt(name="wa-sec-check-network")
 async def check_network_security_prompt(ctx: Context) -> str:
     """Provides guidance on checking AWS network resources for proper in-transit security configuration.
 
@@ -1180,26 +1180,26 @@ By following this workflow, you'll efficiently assess your AWS network security 
 
 def main():
     """Run the MCP server with CLI argument support."""
-    parser = argparse.ArgumentParser(description='AWS Security Pillar MCP Server')
-    parser.add_argument('--sse', action='store_true', help='Use SSE transport')
-    parser.add_argument('--port', type=int, default=8888, help='Port to run the server on')
+    parser = argparse.ArgumentParser(description="AWS Security Pillar MCP Server")
+    parser.add_argument("--sse", action="store_true", help="Use SSE transport")
+    parser.add_argument("--port", type=int, default=8888, help="Port to run the server on")
 
     args = parser.parse_args()
 
     # Initialize shared components
     asyncio.run(initialize())
 
-    logger.info('Starting AWS Security Pillar MCP Server')
+    logger.info("Starting AWS Security Pillar MCP Server")
 
     # Run server with appropriate transport
     if args.sse:
-        logger.info(f'Running MCP server with SSE transport on port {args.port}')
+        logger.info(f"Running MCP server with SSE transport on port {args.port}")
         mcp.settings.port = args.port
-        mcp.run(transport='sse')
+        mcp.run(transport="sse")
     else:
-        logger.info('Running MCP server with default transport')
+        logger.info("Running MCP server with default transport")
         mcp.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
