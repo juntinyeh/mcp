@@ -91,10 +91,10 @@ Here's a recommended workflow for a comprehensive security assessment:
 1. **First, check your security services**:
    ```
    Check if the following security services are properly enabled and configured in my AWS environment:
-   
+
    Region: us-east-1
    AWS Profile: default
-   
+
    1. IAM Access Analyzer
    2. AWS Security Hub
    3. Amazon GuardDuty
@@ -104,31 +104,31 @@ Here's a recommended workflow for a comprehensive security assessment:
 2. **Next, explore your resources**:
    ```
    I'd like to explore what AWS resources I have deployed in my environment:
-   
+
    Region: us-east-1
    AWS Profile: default
    Services to explore: ec2,s3,rds,iam,lambda
-   
+
    Please provide a resource inventory with counts by service type.
    ```
 
 3. **Then, perform a comprehensive security assessment**:
    ```
    I'd like to assess the security posture of my AWS environment:
-   
+
    Region: us-east-1
    AWS Profile: default
-   
+
    Please perform a comprehensive security assessment and provide remediation recommendations.
    ```
 
 4. **Finally, review specific findings for critical services**:
    ```
    I'd like to retrieve critical findings from my AWS environment:
-   
+
    Region: us-east-1
    AWS Profile: default
    Security Service: guardduty
    Severity: HIGH
-   
+
    Please summarize the findings and their potential impact.

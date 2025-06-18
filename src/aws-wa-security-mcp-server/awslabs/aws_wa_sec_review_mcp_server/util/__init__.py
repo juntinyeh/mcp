@@ -14,20 +14,16 @@
 
 """Utility functions for AWS Security Pillar MCP Server."""
 
+from .resource_utils import list_services_in_region
 from .security_services import (
     check_access_analyzer,
-    check_security_hub,
     check_guard_duty,
     check_inspector,
-    get_guardduty_findings,
-    get_securityhub_findings,
-    get_inspector_findings,
+    check_security_hub,
     get_access_analyzer_findings,
-)
-
-from .resource_utils import (
-    list_services_in_region,
-    list_services_alternative
+    get_guardduty_findings,
+    get_inspector_findings,
+    get_securityhub_findings,
 )
 
 # Export all imported functions
@@ -41,8 +37,6 @@ __all__ = [
     'get_securityhub_findings',
     'get_inspector_findings',
     'get_access_analyzer_findings',
-    
     # Resource utility functions
     'list_services_in_region',
-    'list_services_alternative'
 ]

@@ -15,7 +15,7 @@
 """Constants for the AWS Security Pillar MCP Server."""
 
 # Default AWS regions to use if none are specified
-DEFAULT_REGIONS = ["us-east-1", "us-west-2", "eu-west-1"]
+DEFAULT_REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1']
 
 # Instructions for the MCP server
 INSTRUCTIONS = """AWS Security Pillar MCP Server for analyzing AWS environments against Well-Architected Framework security principles.
@@ -40,11 +40,11 @@ Retrieves security findings from various AWS security services including GuardDu
 Inspector, IAM Access Analyzer, Trusted Advisor, and Macie with filtering options by severity.
 
 ### CheckStorageEncryption
-Identifies storage resources using Resource Explorer and checks if they are properly configured 
+Identifies storage resources using Resource Explorer and checks if they are properly configured
 for data protection at rest according to AWS Well-Architected Framework Security Pillar best practices.
 
 ### CheckNetworkSecurity
-Identifies network resources using Resource Explorer and checks if they are properly configured 
+Identifies network resources using Resource Explorer and checks if they are properly configured
 for data protection in transit according to AWS Well-Architected Framework Security Pillar best practices.
 This tool helps ensure your network configurations follow security best practices for protecting data in transit.
 
@@ -92,50 +92,22 @@ This server aligns with the Security Pillar of the AWS Well-Architected Framewor
 For more information, see: https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html
 """
 
-# Service descriptions for AWS services
-SERVICE_DESCRIPTIONS = {
-    "s3": "Amazon Simple Storage Service (S3) is an object storage service",
-    "ec2": "Amazon Elastic Compute Cloud (EC2) provides resizable compute capacity",
-    "rds": "Amazon Relational Database Service (RDS) facilitates database management",
-    "iam": "AWS Identity and Access Management (IAM) controls access to AWS services",
-    "lambda": "AWS Lambda is a serverless compute service",
-    "cloudfront": "Amazon CloudFront is a content delivery network service",
-    "route53": "Amazon Route 53 is a scalable DNS web service",
-    "dynamodb": "Amazon DynamoDB is a NoSQL database service",
-    "securityhub": "AWS Security Hub is a security posture management service",
-    "guardduty": "Amazon GuardDuty is a threat detection service",
-    "config": "AWS Config is a service for assessing, auditing, and evaluating configurations",
-    "cloudtrail": "AWS CloudTrail tracks user activity and API usage",
-    "inspector": "Amazon Inspector is a vulnerability management service",
-    "macie": "Amazon Macie is a data security service",
-    "kms": "AWS Key Management Service (KMS) creates and manages cryptographic keys",
-    "waf": "AWS WAF is a web application firewall",
-    "shield": "AWS Shield is a managed DDoS protection service",
-    "firewall": "AWS Network Firewall is a stateful, managed network firewall service",
-    "vpc": "Amazon Virtual Private Cloud (VPC) provides isolated cloud resources",
-    "ebs": "Amazon Elastic Block Store (EBS) provides block-level storage volumes",
-    "elb": "Elastic Load Balancing (ELB) distributes incoming traffic",
-    "apigateway": "Amazon API Gateway is a fully managed service for APIs",
-    "acm": "AWS Certificate Manager handles SSL/TLS certificates",
-    "secretsmanager": "AWS Secrets Manager securely stores and rotates secrets",
-    "ssm": "AWS Systems Manager provides visibility and control over infrastructure",
-}
 
 # Security domains from Well-Architected Framework
 SECURITY_DOMAINS = [
-    "identity_and_access_management",
-    "detection",
-    "infrastructure_protection",
-    "data_protection",
-    "incident_response",
-    "application_security",
+    'identity_and_access_management',
+    'detection',
+    'infrastructure_protection',
+    'data_protection',
+    'incident_response',
+    'application_security',
 ]
 
 # Severity levels for security findings
 SEVERITY_LEVELS = {
-    "CRITICAL": 4,
-    "HIGH": 3,
-    "MEDIUM": 2,
-    "LOW": 1,
-    "INFORMATIONAL": 0,
+    'CRITICAL': 4,
+    'HIGH': 3,
+    'MEDIUM': 2,
+    'LOW': 1,
+    'INFORMATIONAL': 0,
 }
